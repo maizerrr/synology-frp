@@ -1,52 +1,90 @@
-/* FRP client - native DSM window.
+/* FRP 客户端 —— DSM 原生窗口。
  *
- * The window is built from DSM's own ExtJS widgets (no iframe): a toolbar with
- * the live status and run controls, the config editor, and the log pane.
- * Data comes from the package backend through the DSM same-origin proxy at
- * /webman/3rdparty/synology-frp/api/.
- *
- * Everything lives inside this closure: DSM shares one global scope between
- * packages.
+ * DSM 7.2 起桌面与任务栏是 Vue 的：ExtJS 的 AppWindow 关不掉也注册不上
+ * （taskbar 报 closeWindow 读到 null）。这里按官方示例走 Vue：
+ *   Vue.extend -> <v-app-instance> -> <v-app-window>
+ * 窗口内容用纯 DOM 渲染（不用 iframe），数据经同源反代访问包内后端。
  */
 (function () {
     'use strict';
 
-    var NAMESPACE = 'SYNO.SDS.SynologyFrp';
-    var PACKAGE = 'synology-frp';
-    var API = '/webman/3rdparty/' + PACKAGE + '/api';
-    var POLL_MS = 3000;
+    var NS = 'SYNO.SDS.SynologyFrp';
+    var API = '/webman/3rdparty/synology-frp/api';
 
-    Ext.namespace(NAMESPACE);
+    SYNO.namespace(NS);
 
-    // ------------------------------------------------------------------ ajax
+    var CSS = [
+        '.frp-root{display:flex;flex-direction:column;height:100%;width:100%;',
+        'background:#f2f4f7;font:13px/1.5 -apple-system,"Segoe UI","PingFang SC",sans-serif;color:#1d2129;}',
+        '.frp-bar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fff;',
+        'border-bottom:1px solid #e2e6ec;flex:0 0 auto;}',
+        '.frp-dot{width:8px;height:8px;border-radius:50%;background:#c9ced6;}',
+        '.frp-dot.ok{background:#34a853;}',
+        '.frp-dot.bad{background:#d93025;}',
+        '.frp-dot.warn{background:#f0a020;}',
+        '.frp-grow{flex:1 1 auto;}',
+        '.frp-bar select,.frp-bar input{padding:3px 6px;border:1px solid #e2e6ec;border-radius:4px;',
+        'background:#fff;font-family:inherit;font-size:12px;}',
+        '.frp-bar button,.frp-head button{padding:4px 10px;border:1px solid #e2e6ec;border-radius:4px;',
+        'background:#fff;font-family:inherit;font-size:12px;cursor:pointer;}',
+        '.frp-bar button:hover,.frp-head button:hover{background:#f5f7fa;}',
+        '.frp-bar button[disabled]{opacity:.45;cursor:default;}',
+        '.frp-head button.primary{background:#1f7ae0;border-color:#1f7ae0;color:#fff;}',
+        '.frp-head button.primary:hover{background:#1565d8;}',
+        '.frp-editor{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;padding:8px 10px 0;}',
+        '.frp-head{display:flex;align-items:center;gap:8px;padding:2px 0 6px;color:#6b7280;font-size:12px;}',
+        '.frp-editor textarea{flex:1 1 auto;width:100%;min-height:0;box-sizing:border-box;',
+        'font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;padding:8px 10px;',
+        'border:1px solid #e2e6ec;border-radius:6px;background:#fff;color:#1d2129;resize:none;}',
+        '.frp-editor textarea:focus{outline:none;border-color:#1f7ae0;}',
+        '.frp-log{flex:0 0 210px;display:flex;flex-direction:column;padding:8px 10px 10px;min-height:0;}',
+        '.frp-log pre{flex:1 1 auto;margin:0;overflow:auto;padding:8px 10px;border-radius:6px;',
+        'background:#0f1419;color:#d7e0ea;font:11px/1.6 ui-monospace,Menlo,Consolas,monospace;',
+        'white-space:pre-wrap;word-break:break-word;}'
+    ].join('');
+
+    var HTML = [
+        '<div class="frp-root">',
+        '  <div class="frp-bar">',
+        '    <span class="frp-dot" data-el="dot"></span>',
+        '    <span data-el="status">正在读取状态…</span>',
+        '    <span class="frp-grow"></span>',
+        '    <select data-el="format"><option value="toml">TOML</option><option value="ini">INI（旧格式）</option></select>',
+        '    <button data-el="start" type="button">启动</button>',
+        '    <button data-el="stop" type="button">停止</button>',
+        '    <button data-el="restart" type="button">重启</button>',
+        '  </div>',
+        '  <div class="frp-editor">',
+        '    <div class="frp-head">frpc 配置（保存后会自动重启）<span class="frp-grow"></span>',
+        '      <button data-el="save" class="primary" type="button">保存并重启</button></div>',
+        '    <textarea data-el="content" spellcheck="false"></textarea>',
+        '  </div>',
+        '  <div class="frp-log">',
+        '    <div class="frp-head">最近日志<span class="frp-grow"></span>',
+        '      <button data-el="logs" type="button">刷新日志</button></div>',
+        '    <pre data-el="log"></pre>',
+        '  </div>',
+        '</div>'
+    ].join('');
+
+    // ---------------------------------------------------------------- helpers
     function request(method, path, payload) {
-        return new Promise(function (resolve, reject) {
-            var options = {
-                url: API + path,
-                method: method,
-                headers: { 'Accept': 'application/json' },
-                callback: function (unused, success, response) {
-                    var data = {};
-                    try {
-                        data = response.responseText ? Ext.decode(response.responseText) : {};
-                    } catch (err) {
-                        data = { message: '返回内容无法解析' };
-                    }
-                    if (success && response.status >= 200 && response.status < 300) {
-                        resolve(data);
-                        return;
-                    }
+        var options = { method: method, credentials: 'same-origin', headers: { 'Accept': 'application/json' } };
+        if (payload !== undefined) {
+            options.headers['Content-Type'] = 'application/json';
+            options.body = JSON.stringify(payload);
+        }
+        return fetch(API + path, options).then(function (response) {
+            return response.text().then(function (text) {
+                var data = {};
+                try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { message: '返回内容无法解析' }; }
+                if (!response.ok) {
                     var error = new Error(data.message || ('请求失败（' + response.status + '）'));
-                    error.code = data.code;
                     error.status = response.status;
-                    reject(error);
+                    throw error;
                 }
-            };
-            if (payload !== undefined) {
-                options.headers['Content-Type'] = 'application/json';
-                options.rawData = Ext.encode(payload);
-            }
-            Ext.Ajax.request(options);
+                return data;
+            });
         });
     }
 
@@ -60,281 +98,174 @@
         return Math.floor(hours / 24) + ' 天';
     }
 
-    function offlineHint(error) {
-        return [
-            '连不上套件的后台服务。',
-            '',
-            '1) 到「套件中心 → 已安装」确认本套件是「运行中」。',
-            '2) SSH 执行 curl -s localhost:9844/api/health，有 JSON 回来说明后台正常。',
-            '3) 后台正常但仍报错，说明 DSM 的反向代理没生效，把下面这段加到',
-            '   /etc/nginx/conf.d/http.synology-frp.conf 后执行 nginx -t && nginx -s reload：',
-            '',
-            'location ^~ /webman/3rdparty/synology-frp/api/ {',
-            '    proxy_pass http://127.0.0.1:9844/api/;',
-            '    proxy_set_header Host $host;',
-            '}',
-            (error && error.message ? '\n技术细节：' + error.message : '')
-        ].join('\n');
+    function offlineText(error) {
+        return '连不上套件的后台服务（' + (error && error.message ? error.message : '未知错误') + '）。\n\n' +
+            '1) 套件中心 → 已安装，确认本套件为「运行中」；\n' +
+            '2) SSH 执行 curl -s localhost:9844/api/health，有 JSON 回来说明后台正常；\n' +
+            '3) 后台正常仍报错，说明 DSM 反代没生效，把下面加到 /etc/nginx/conf.d/http.synology-frp.conf 后 nginx -s reload：\n' +
+            'location ^~ /webman/3rdparty/synology-frp/api/ {\n' +
+            '    proxy_pass http://127.0.0.1:9844/api/;\n' +
+            '    proxy_set_header Host $host;\n' +
+            '}';
     }
 
-    // ------------------------------------------------------------- components
-    Ext.define(NAMESPACE + '.Instance', {
-        extend: 'SYNO.SDS.AppInstance',
-        appWindowName: NAMESPACE + '.MainWindow',
-        constructor: function () {
-            this.callParent(arguments);
-        }
-    });
+    // ------------------------------------------------------------------ window
+    SYNO.SDS.SynologyFrp.Instance = Vue.extend({
+        render: function (h) {
+            return h('v-app-instance', {
+                attrs: { 'class-name': NS + '.Instance' }
+            }, [
+                h('v-app-window', {
+                    ref: 'appWindow',
+                    attrs: { width: 1000, height: 680, 'syno-id': NS + '.Window' }
+                }, [
+                    h('div', {
+                        ref: 'root',
+                        domProps: { innerHTML: '<style>' + CSS + '</style>' + HTML }
+                    })
+                ])
+            ]);
+        },
 
-    Ext.define(NAMESPACE + '.MainWindow', {
-        extend: 'SYNO.SDS.AppWindow',
+        mounted: function () {
+            this.start();
+        },
 
-        constructor: function (config) {
-            var me = this;
+        beforeDestroy: function () {
+            if (this.timer) { window.clearInterval(this.timer); this.timer = null; }
+        },
 
-            me.ready = false;
-            me.loadingFormat = false;
+        methods: {
+            start: function () {
+                var root = this.$refs.root;
+                if (!root) { return; }
+                var me = this;
+                this.el = {};
+                ['dot', 'status', 'format', 'start', 'stop', 'restart', 'save', 'content', 'logs', 'log']
+                    .forEach(function (name) {
+                        me.el[name] = root.querySelector('[data-el="' + name + '"]');
+                    });
 
-            me.statusField = Ext.create('Ext.toolbar.TextItem', {
-                itemId: 'statusText',
-                text: '正在读取状态…'
-            });
+                this.el.save.addEventListener('click', function () { me.save(); });
+                this.el.start.addEventListener('click', function () { me.action('start'); });
+                this.el.stop.addEventListener('click', function () { me.action('stop'); });
+                this.el.restart.addEventListener('click', function () { me.action('restart'); });
+                this.el.logs.addEventListener('click', function () { me.loadLogs(); });
+                this.el.format.addEventListener('change', function () { me.onFormatChange(me.el.format.value); });
 
-            me.formatCombo = Ext.create('Ext.form.field.ComboBox', {
-                itemId: 'formatCombo',
-                editable: false,
-                width: 150,
-                store: [['toml', 'TOML'], ['ini', 'INI（旧格式）']],
-                value: 'toml',
-                listeners: {
-                    change: function (combo, value) {
-                        if (me.ready) { me.onFormatChange(value); }
+                this.ready = false;
+                this.loadState().then(function () {
+                    me.ready = true;
+                    me.loadLogs();
+                }).catch(function (error) {
+                    me.setStatus('未连接后台服务', 'bad');
+                    window.alert(offlineText(error));
+                });
+
+                this.timer = window.setInterval(function () { me.poll(); }, 3000);
+            },
+
+            loadState: function () {
+                var me = this;
+                return request('GET', '/state').then(function (data) {
+                    me.el.format.value = data.format || 'toml';
+                    if (!me.el.content.value) { me.el.content.value = data.content || ''; }
+                    me.applyStatus(data.status || {});
+                    return data;
+                });
+            },
+
+            poll: function () {
+                var me = this;
+                if (!this.el) { return; }
+                request('GET', '/state').then(function (data) {
+                    me.applyStatus(data.status || {});
+                }).catch(function () {
+                    me.setStatus('未连接后台服务', 'bad');
+                });
+            },
+
+            setStatus: function (text, tone) {
+                if (!this.el) { return; }
+                this.el.status.textContent = text;
+                this.el.dot.className = 'frp-dot' + (tone ? ' ' + tone : '');
+            },
+
+            applyStatus: function (status) {
+                var me = this;
+                if (!status.running) {
+                    me.setStatus('已停止', 'bad');
+                    me.el.start.disabled = false;
+                    me.el.stop.disabled = true;
+                    me.el.restart.disabled = false;
+                    return;
+                }
+                var text = '运行中';
+                var tone = 'ok';
+                if (status.connected === false) {
+                    text += ' · 未连上服务器';
+                    tone = 'warn';
+                } else if (status.connected === true) {
+                    text += ' · 已连上';
+                }
+                if (status.version) { text += ' · v' + status.version; }
+                text += ' · 已运行 ' + duration(status.uptime);
+                me.setStatus(text, tone);
+                me.el.start.disabled = true;
+                me.el.stop.disabled = false;
+                me.el.restart.disabled = false;
+            },
+
+            save: function () {
+                var me = this;
+                var content = me.el.content.value;
+                if (!content || !content.replace(/\s/g, '')) {
+                    window.alert('配置内容不能为空。');
+                    return;
+                }
+                request('PUT', '/file', { format: me.el.format.value || 'toml', content: content })
+                    .then(function (data) {
+                        if (data.state && data.state.content) { me.el.content.value = data.state.content; }
+                        if (data.started) {
+                            window.alert('已保存并重启，配置已生效。');
+                        } else {
+                            window.alert('已保存，但启动失败：\n' + (data.error || '请查看下方日志。'));
+                        }
+                        me.loadState();
+                        me.loadLogs();
+                    })
+                    .catch(function (error) { window.alert('保存失败：' + error.message); });
+            },
+
+            action: function (kind) {
+                var me = this;
+                request('POST', '/' + kind).then(function (data) {
+                    if (data.started === false) {
+                        window.alert('启动失败：\n' + (data.error || ''));
+                    } else if (data.state) {
+                        me.applyStatus(data.state.status || {});
                     }
-                }
-            });
+                    me.loadLogs();
+                }).catch(function (error) { window.alert('操作失败：' + error.message); });
+            },
 
-            me.btnStart = Ext.create('Ext.button.Button', {
-                text: '启动',
-                handler: function () { me.runAction('start', '已启动'); }
-            });
-            me.btnStop = Ext.create('Ext.button.Button', {
-                text: '停止',
-                handler: function () { me.runAction('stop', '已停止'); }
-            });
-            me.btnRestart = Ext.create('Ext.button.Button', {
-                text: '重启',
-                handler: function () { me.runAction('restart', '已重启'); }
-            });
+            loadLogs: function () {
+                var me = this;
+                request('GET', '/logs?lines=80').then(function (data) {
+                    me.el.log.textContent = (data.lines || []).join('\n');
+                }).catch(function () {
+                    me.el.log.textContent = '（日志读取失败）';
+                });
+            },
 
-            me.configArea = Ext.create('Ext.form.field.TextArea', {
-                itemId: 'configArea',
-                hideLabel: true,
-                allowBlank: true,
-                resizable: false,
-                fieldStyle: 'height:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;resize:none;'
-            });
-
-            me.logArea = Ext.create('Ext.form.field.TextArea', {
-                itemId: 'logArea',
-                hideLabel: true,
-                readOnly: true,
-                resizable: false,
-                fieldStyle: 'height:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;resize:none;background:#fafbfc;'
-            });
-
-            me.logPath = Ext.create('Ext.toolbar.TextItem', { itemId: 'logPath', text: '' });
-
-            config = Ext.apply({
-                width: 1000,
-                height: 680,
-                layout: 'border',
-                border: false,
-                dockedItems: [{
-                    xtype: 'toolbar',
-                    dock: 'top',
-                    items: [
-                        me.statusField,
-                        '->',
-                        me.formatCombo,
-                        { xtype: 'tbseparator' },
-                        me.btnStart,
-                        me.btnStop,
-                        me.btnRestart
-                    ]
-                }],
-                items: [
-                    {
-                        xtype: 'panel',
-                        region: 'center',
-                        border: false,
-                        layout: 'fit',
-                        tbar: [
-                            { xtype: 'tbtext', text: 'frpc 配置（保存后会自动重启）' },
-                            '->',
-                            {
-                                xtype: 'button',
-                                text: '保存并重启',
-                                handler: function () { me.save(); }
-                            }
-                        ],
-                        items: [me.configArea]
-                    },
-                    {
-                        xtype: 'panel',
-                        region: 'south',
-                        height: 230,
-                        split: true,
-                        border: false,
-                        layout: 'fit',
-                        title: '最近日志',
-                        collapsible: true,
-                        collapseMode: 'mini',
-                        tbar: [
-                            { xtype: 'button', text: '刷新日志', handler: function () { me.loadLogs(); } },
-                            '->',
-                            me.logPath
-                        ],
-                        items: [me.logArea]
-                    }
-                ]
-            }, config || {});
-
-            me.callParent([config]);
-
-            me.on('afterrender', function () { me.bootstrap(); });
-            me.pollTimer = window.setInterval(function () { me.pollStatus(); }, POLL_MS);
-        },
-
-        // ------------------------------------------------------------ lifecycle
-        bootstrap: function () {
-            var me = this;
-            me.loadState().then(function () {
-                me.ready = true;
-                me.loadLogs();
-            }).catch(function (error) {
-                me.statusField.setText('未连接后台服务');
-                Ext.Msg.alert('连不上后台服务', offlineHint(error));
-            });
-        },
-
-        loadState: function () {
-            var me = this;
-            return request('GET', '/state').then(function (data) {
-                me.formatCombo.suspendEvents(false);
-                me.formatCombo.setValue(data.format || 'toml');
-                me.formatCombo.resumeEvents();
-                if (me.configArea && !me.configArea.getValue()) {
-                    me.configArea.setValue(data.content || '');
-                }
-                me.applyStatus(data.status || {});
-                return data;
-            });
-        },
-
-        pollStatus: function () {
-            var me = this;
-            if (me.destroyed) { return; }
-            request('GET', '/state').then(function (data) {
-                me.applyStatus(data.status || {});
-            }).catch(function () {
-                me.statusField.setText('未连接后台服务');
-            });
-        },
-
-        applyStatus: function (status) {
-            var me = this;
-            if (!status.running) {
-                me.statusField.setText('已停止');
-                me.btnStart.enable();
-                me.btnStop.disable();
-                me.btnRestart.enable();
-                return;
+            onFormatChange: function (value) {
+                var me = this;
+                if (!this.ready || !value) { return; }
+                request('GET', '/template?format=' + encodeURIComponent(value)).then(function (data) {
+                    me.el.content.value = data.content || '';
+                    window.alert('已载入 ' + value.toUpperCase() + ' 示例。确认后点「保存并重启」，旧格式文件会被移除。');
+                }).catch(function (error) { window.alert('载入示例失败：' + error.message); });
             }
-            var text = '运行中';
-            if (status.connected === false) {
-                text += ' · 未连上服务器';
-            } else if (status.connected === true) {
-                text += ' · 已连上';
-            }
-            if (status.version) { text += ' · v' + status.version; }
-            text += ' · 已运行 ' + duration(status.uptime);
-            me.statusField.setText(text);
-            me.btnStart.disable();
-            me.btnStop.enable();
-            me.btnRestart.enable();
-        },
-
-        // -------------------------------------------------------------- actions
-        save: function () {
-            var me = this;
-            var content = me.configArea.getValue();
-            var format = me.formatCombo.getValue() || 'toml';
-            if (!content || !content.replace(/\s/g, '')) {
-                Ext.Msg.alert('无法保存', '配置内容不能为空。');
-                return;
-            }
-            request('PUT', '/file', { format: format, content: content }).then(function (data) {
-                if (data.state && data.state.content) {
-                    me.configArea.setValue(data.state.content);
-                }
-                if (data.started) {
-                    Ext.Msg.alert('已保存并重启', '配置已生效。');
-                } else {
-                    Ext.Msg.alert('已保存，但启动失败', data.error || '请查看下方的日志。');
-                }
-                me.loadState();
-                me.loadLogs();
-            }).catch(function (error) {
-                Ext.Msg.alert('保存失败', error.message);
-            });
-        },
-
-        runAction: function (kind) {
-            var me = this;
-            request('POST', '/' + kind).then(function (data) {
-                if (data.started === false) {
-                    Ext.Msg.alert('启动失败', data.error || '');
-                } else if (data.state) {
-                    me.applyStatus(data.state.status || {});
-                }
-                me.loadLogs();
-            }).catch(function (error) {
-                Ext.Msg.alert('操作失败', error.message);
-            });
-        },
-
-        loadLogs: function () {
-            var me = this;
-            request('GET', '/logs?lines=80').then(function (data) {
-                me.logArea.setValue((data.lines || []).join('\n'));
-                me.logPath.setText(data.path || '');
-            }).catch(function () {
-                me.logArea.setValue('（日志读取失败）');
-            });
-        },
-
-        onFormatChange: function (value) {
-            var me = this;
-            if (!value || me.loadingFormat) { return; }
-            me.loadingFormat = true;
-            request('GET', '/template?format=' + encodeURIComponent(value)).then(function (data) {
-                me.configArea.setValue(data.content || '');
-                me.loadingFormat = false;
-                Ext.Msg.alert('已载入 ' + value.toUpperCase() + ' 示例',
-                    '确认内容后点「保存并重启」，旧格式的配置文件会被移除。');
-            }).catch(function (error) {
-                me.loadingFormat = false;
-                Ext.Msg.alert('载入示例失败', error.message);
-            });
-        },
-
-        // ------------------------------------------------------------- teardown
-        destroy: function () {
-            if (this.pollTimer) {
-                window.clearInterval(this.pollTimer);
-                this.pollTimer = null;
-            }
-            this.callParent(arguments);
         }
     });
 }());

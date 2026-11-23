@@ -70,25 +70,7 @@ def test_privilege_drops_root(spk_path):
     assert data["defaults"]["run-as"] == "package"
 
 
-def test_ui_config_declares_a_dsm_window_app(payload, info):
-    """DSM 7.2+ cannot embed a type:url app; it must be a real ExtJS window."""
-    ui = json.loads((payload / "ui" / "config").read_text(encoding="utf-8"))
-    assert "app.js" in ui, "ui/config must name the JS bundle that defines the classes"
-    classes = {}
-    for entries in ui.values():
-        classes.update(entries)
 
-    app = classes[info["dsmappname"]]
-    assert app["type"] == "app"
-    assert app["allUsers"] is True
-    assert app["appWindow"] in classes, "the window class must be declared too"
-    assert classes[app["appWindow"]]["type"] == "lib"
-
-    bundle = (payload / "ui" / "app.js").read_text(encoding="utf-8")
-    window_class = app["appWindow"].rsplit(".", 1)[-1]
-    assert window_class in bundle, "the window class name must appear in the bundle"
-    assert "SYNO.SDS.AppWindow" in bundle, "the window must extend DSM's AppWindow"
-    assert "SYNO.SDS.AppInstance" in bundle, "the app must extend DSM's AppInstance"
 
 def test_payload_contains_backend_ui_and_engine(payload):
     assert (payload / "backend" / "run.py").is_file()
@@ -170,10 +152,49 @@ def test_spk_is_an_uncompressed_tar(spk_path):
     assert head == b"INFO", "spk must be an uncompressed tar (got %r)" % head
 
 
-def test_window_is_native_not_an_iframe(payload):
-    """The user asked for a native DSM window: widgets, not an embedded page."""
+def test_ui_config_declares_a_vue_window_app(payload, info):
+    """Official pattern: one Vue class, used as its own appWindow."""
+    ui = json.loads((payload / "ui" / "config").read_text(encoding="utf-8"))
+    assert "app.js" in ui, "ui/config must name the JS bundle"
+    classes = {}
+    for entries in ui.values():
+        classes.update(entries)
+
+    app = classes[info["dsmappname"]]
+    assert app["type"] == "app"
+    assert app["allUsers"] is True
+    assert app["appWindow"] == info["dsmappname"]
+
+
+def test_window_is_a_vue_component_not_an_iframe(payload):
+    """DSM 7.2+ desktop/taskbar is Vue; ExtJS windows never register with it."""
     bundle = (payload / "ui" / "app.js").read_text(encoding="utf-8")
-    assert "tag: 'iframe'" not in bundle, "the window must not embed a page"
-    assert "Ext.define" in bundle
-    assert "SYNO.SDS.AppWindow" in bundle
-    assert "Ext.form.field.TextArea" in bundle, "the editor must be a native field"
+    assert "Vue.extend" in bundle
+    assert "v-app-instance" in bundle
+    assert "v-app-window" in bundle
+    assert "tag: 'iframe'" not in bundle
+    assert "Ext.define" not in bundle, "the ExtJS window does not work on DSM 7.4"
+
+
+def test_ui_config_declares_a_vue_window_app(payload, info):
+    """Official pattern: one Vue class, used as its own appWindow."""
+    ui = json.loads((payload / "ui" / "config").read_text(encoding="utf-8"))
+    assert "app.js" in ui, "ui/config must name the JS bundle"
+    classes = {}
+    for entries in ui.values():
+        classes.update(entries)
+
+    app = classes[info["dsmappname"]]
+    assert app["type"] == "app"
+    assert app["allUsers"] is True
+    assert app["appWindow"] == info["dsmappname"]
+
+
+def test_window_is_a_vue_component_not_an_iframe(payload):
+    """DSM 7.2+ desktop/taskbar is Vue; ExtJS windows never register with it."""
+    bundle = (payload / "ui" / "app.js").read_text(encoding="utf-8")
+    assert "Vue.extend" in bundle
+    assert "v-app-instance" in bundle
+    assert "v-app-window" in bundle
+    assert "tag: 'iframe'" not in bundle
+    assert "Ext.define" not in bundle, "the ExtJS window does not work on DSM 7.4"

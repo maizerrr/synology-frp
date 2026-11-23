@@ -5,15 +5,9 @@
       "title": "FRP 客户端",
       "desc": "内网穿透客户端配置",
       "icon": "images/icon_72.png",
-      "appWindow": "SYNO.SDS.SynologyFrp.MainWindow",
+      "appWindow": "SYNO.SDS.SynologyFrp.Instance",
       "allUsers": true,
-      "allowMultiInstance": false,
-      "depend": ["SYNO.SDS.SynologyFrp.MainWindow"]
-    },
-    "SYNO.SDS.SynologyFrp.MainWindow": {
-      "type": "lib",
-      "title": "FRP 客户端",
-      "icon": "images/icon_72.png"
+      "allowMultiInstance": false
     }
   }
 }
