@@ -1,0 +1,19 @@
+{
+  ".url": {
+    "SYNO.SDS.SynologyFrp.Instance": {
+      "title": "FRP 客户端",
+      "desc": "内网穿透客户端配置",
+      "icon": "images/icon_{0}.png",
+      "type": "url",
+      "protocol": "",
+      "url": "index.html",
+      "allUsers": true,
+      "windowProperties": {
+        "resize": "true",
+        "minimizable": "true",
+        "maximizable": "true",
+        "restore": true
+      }
+    }
+  }
+}

@@ -1,0 +1,89 @@
+#!/bin/sh
+# DSM start / stop / status entry point. Starts the small UI backend; the
+# backend in turn starts frpc with the saved configuration.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/common"
+
+start_service() {
+    if is_running; then
+        return 0
+    fi
+    ensure_dirs || return 1
+    if ! resolve_python; then
+        echo "python3 not found on this DSM build" >&2
+        return 1
+    fi
+    "$PYTHON_BIN" "${DEST_DIR}/backend/run.py" \
+        --var-dir "$VAR_DIR" \
+        --port "$PORT" \
+        --package "$PKG_NAME" \
+        >>"${LOG_DIR}/service.log" 2>&1 &
+    echo $! > "$VAR_DIR/ui.pid"
+    tries=0
+    while [ "$tries" -lt 20 ]; do
+        if is_running; then
+            return 0
+        fi
+        tries=$((tries + 1))
+        sleep 0.5
+    done
+    echo "service failed to start, see ${LOG_DIR}/service.log" >&2
+    return 1
+}
+
+stop_service() {
+    if is_running; then
+        pid="$(cat "$VAR_DIR/ui.pid")"
+        kill "$pid" 2>/dev/null
+        tries=0
+        while is_running && [ "$tries" -lt 20 ]; do
+            tries=$((tries + 1))
+            sleep 0.5
+        done
+        if is_running; then
+            kill -9 "$pid" 2>/dev/null
+        fi
+    fi
+    rm -f "$VAR_DIR/ui.pid"
+
+    # Safety net: the backend stops frpc on a clean shutdown.
+    if [ -f "$PID_FILE" ]; then
+        frpc_pid="$(cat "$PID_FILE" 2>/dev/null)"
+        if [ -n "$frpc_pid" ]; then
+            kill "$frpc_pid" 2>/dev/null
+            sleep 1
+            kill -9 "$frpc_pid" 2>/dev/null
+        fi
+        rm -f "$PID_FILE"
+    fi
+    return 0
+}
+
+case "$1" in
+    start)
+        start_service
+        exit $?
+        ;;
+    stop)
+        stop_service
+        exit 0
+        ;;
+    restart)
+        stop_service
+        start_service
+        exit $?
+        ;;
+    status)
+        if is_running; then
+            echo "running"
+            exit 0
+        fi
+        echo "stopped"
+        exit 1
+        ;;
+    *)
+        echo "usage: $0 {start|stop|restart|status}" >&2
+        exit 1
+        ;;
+esac

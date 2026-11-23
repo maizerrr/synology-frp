@@ -1,0 +1,35 @@
+#!/bin/sh
+# Shared helpers for the package lifecycle scripts.
+
+PKG_NAME="synology-frp"
+VAR_DIR="${SYNOPKG_PKGVAR:-/var/packages/${PKG_NAME}/var}"
+DEST_DIR="${SYNOPKG_PKGDEST:-/var/packages/${PKG_NAME}/target}"
+PID_FILE="${VAR_DIR}/frpc.pid"
+LOG_DIR="${VAR_DIR}/logs"
+PORT="${SYNOFRP_PORT:-9844}"
+PYTHON_BIN=""
+
+resolve_python() {
+    for candidate in /usr/bin/python3 /usr/local/bin/python3 \
+        /var/packages/Python3/target/bin/python3 /var/packages/Python3.9/target/bin/python3; do
+        if [ -x "$candidate" ]; then
+            PYTHON_BIN="$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+ensure_dirs() {
+    mkdir -p "$VAR_DIR" "$LOG_DIR" || return 1
+    return 0
+}
+
+# The UI service (what DSM starts/stops) and frpc itself are tracked separately:
+# the UI can be running while frpc is stopped because of a broken config.
+is_running() {
+    [ -f "$VAR_DIR/ui.pid" ] || return 1
+    pid="$(cat "$VAR_DIR/ui.pid" 2>/dev/null)"
+    [ -n "$pid" ] || return 1
+    kill -0 "$pid" 2>/dev/null
+}

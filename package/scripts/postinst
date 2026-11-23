@@ -1,0 +1,19 @@
+#!/bin/sh
+# Runs after installation / upgrade: prepare the data directory and start.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/common"
+
+ensure_dirs || {
+    echo "failed to create ${VAR_DIR}" >&2
+    exit 1
+}
+
+chmod 700 "$VAR_DIR" 2>/dev/null
+if [ -f "${DEST_DIR}/engine/frpc" ]; then
+    chmod 755 "${DEST_DIR}/engine/frpc" 2>/dev/null
+fi
+
+"${SCRIPT_DIR}/start-stop-status" start >/dev/null 2>&1
+
+exit 0

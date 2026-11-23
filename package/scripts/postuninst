@@ -1,0 +1,8 @@
+#!/bin/sh
+# Runs after uninstallation.
+#
+# Deliberately does nothing: DSM keeps the package's private data
+# (/volumeX/@appdata/<package>) unless the user ticks "delete data" in the
+# uninstall wizard, so a reinstall picks the configuration back up.
+
+exit 0

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Runs before installation / upgrade: stop the running instance first.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/common"
+
+if is_running; then
+    "${SCRIPT_DIR}/start-stop-status" stop >/dev/null 2>&1
+fi
+
+exit 0

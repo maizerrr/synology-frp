@@ -35,3 +35,10 @@ node_modules/
 .claude/
 .sisyphus/
 .superpowers/
+
+# Synology package layer
+/build/
+/.pytest-tmp/
+/run/
+__pycache__/
+*.pyc
