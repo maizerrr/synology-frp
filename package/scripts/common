@@ -69,15 +69,11 @@ publish_diag() {
         tail -30 "${LOG_DIR}/service.log" 2>/dev/null || echo "  (no log)"
         echo
         echo "== nginx: where our location ended up =="
-        for conf in /etc/nginx/nginx.conf /etc/nginx/conf.d/*.conf /etc/nginx/sites-enabled/*; do
-            [ -f "$conf" ] || continue
-            if grep -q "synology-frp" "$conf" 2>/dev/null; then
-                echo "  HIT  ${conf}"
-            fi
-        done
-        echo "  -- listen ports seen in conf.d --"
-        grep -rh "listen" /etc/nginx/conf.d/*.conf 2>/dev/null | sed 's/^ */    /' | sort -u | head -20
-        echo "  -- server_name blocks --"
-        grep -rh "server_name" /etc/nginx/conf.d/*.conf 2>/dev/null | sed 's/^ */    /' | sort -u | head -20
+        echo "  -- files mentioning synology-frp --"
+        grep -rl "synology-frp" /etc/nginx 2>/dev/null | head -10 || echo "  (none)"
+        echo "  -- conf.d listing --"
+        ls -1 /etc/nginx/conf.d 2>/dev/null | head -15 || echo "  (no conf.d)"
+        echo "  -- listen ports in conf.d --"
+        grep -rh "listen" /etc/nginx/conf.d/*.conf 2>/dev/null | sed 's/^ */    /' | sort -u | head -20 || true
     } >"$target" 2>&1 || true
 }

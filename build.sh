@@ -34,6 +34,11 @@ cp "$ROOT/src/ui/config" "$PKGROOT/ui/config"
 cp "$ROOT"/src/ui/*.js "$PKGROOT/ui/"
 cp "$ROOT"/src/ui/images/icon_*.png "$PKGROOT/ui/images/"
 
+# nginx snippet referenced by conf/resource web-config (relpath is relative to
+# the package target dir)
+mkdir -p "$PKGROOT/nginx"
+cp "$ROOT/src/nginx/api.conf" "$PKGROOT/nginx/api.conf"
+
 if [ -f "$ROOT/vendor/frpc/frpc" ]; then
     mkdir -p "$PKGROOT/engine"
     cp "$ROOT/vendor/frpc/frpc" "$PKGROOT/engine/frpc"

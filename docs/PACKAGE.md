@@ -40,7 +40,9 @@ python3 -m pytest -q --basetemp=./.pytest-tmp
 - **窗口是 DSM 原生小浮动窗口**：`INFO` 的 `dsmappname` 用 `SYNO.SDS.SynologyFrp.Application`；`ui/config` 以 `SynologyFrp.js` 为键，登记 `Application`（`type:"app"`，菜单入口）与 `MainWindow`（`type:"lib"`，窗口本体）。
 - **必须用 Ext JS 3 的写法**：DSM 桌面加载的是 Ext JS **3.4**（`/scripts/ext-3/ext-all.js`），`Ext.define` / `this.callParent` 是 Ext 4 的 API，在 3.4 上父类解析为 null，构造直接抛 `Cannot read properties of null (reading 'apply')`。所以类用 `Ext.extend(基类, {...})` 定义、构造里用 `superclass.constructor.call(this, ...)`；组件类名是 `Ext.form.TextArea` 而不是 `Ext.form.field.TextArea`；`Ext.create` 也不能用。窗口创建失败时 DSM 会留下一个永远 loading、关不掉的任务栏标签，症状具有误导性。
 - 窗口内是原生 Ext 控件：logo、一行说明、状态行、配置 TextArea、保存按钮。不用 iframe，也不塞大页面。
-- `ui/index.html` 保留作排查页：浏览器直接打开 `/webman/3rdparty/synology-frp/index.html` 可验证"后端 + 反代"链路。
+- **API 走 DSM 自己的 nginx，但要按 DSM 7.2 的 `web-config` 声明**：光放一个 `conf/nginx/nginx.conf.template` DSM **不会**接管（实测在任何端口都不生效，请求落到 DSM 自己的 403 页）。正确做法是在 `conf/resource` 里登记
+  `{"web-config": {"nginx-static-config": {"enable": [{"type": "dsm", "relpath": "nginx/api.conf"}]}}}`，
+  并把片段打进 `package.tgz` 的 `nginx/api.conf`（`relpath` 相对包 target 目录），`INFO` 里写 `instuninst_restart_services="nginx.service"`，DSM 才会把它链进 DSM server block 并 reload。`type` 可选 `dsm/www/http/server/x-accel/main`，`dsm` 表示放进 DSM 自己的 server block（含自定义端口/域名块）。
 - **端口 9844 仅监听 127.0.0.1**，浏览器侧走 DSM 同源反代，登录态由 DSM 兜住，套件内不自建账号。
 - **配置文件在套件私有目录**（`/var/packages/synology-frp/var/frpc.toml|.ini`），卸载默认保留，重装自动接回。
 

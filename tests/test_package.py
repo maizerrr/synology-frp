@@ -50,7 +50,7 @@ def test_spk_layout(spk_path):
         names = set(archive.getnames())
     for required in ("INFO", "package.tgz", "PACKAGE_ICON.PNG",
                      "scripts/postinst", "scripts/start-stop-status",
-                     "conf/privilege", "conf/nginx/nginx.conf.template"):
+                     "conf/privilege", "conf/resource"):
         assert required in names, "missing %s" % required
 
 
@@ -103,9 +103,19 @@ def test_scripts_are_valid_shell(spk_path, tmp_path):
             assert result.returncode == 0, "%s: %s" % (name, result.stderr)
 
 
-def test_nginx_template_proxies_this_package(spk_path):
+def test_web_config_declares_the_api_location(spk_path, payload):
+    """DSM 7.2+ only activates nginx snippets registered through conf/resource."""
     with tarfile.open(spk_path, "r:*") as archive:
-        text = archive.extractfile("conf/nginx/nginx.conf.template").read().decode("utf-8")
+        resource = json.loads(archive.extractfile("conf/resource").read().decode("utf-8"))
+
+    entries = resource["web-config"]["nginx-static-config"]["enable"]
+    assert entries, "web-config must register at least one snippet"
+    entry = entries[0]
+    assert entry["type"] == "dsm", "the snippet belongs inside DSM's own server block"
+
+    snippet = payload / entry["relpath"]
+    assert snippet.is_file(), "relpath must exist inside package.tgz"
+    text = snippet.read_text(encoding="utf-8")
     assert "/webman/3rdparty/synology-frp/api/" in text
     assert "127.0.0.1:9844" in text
 
