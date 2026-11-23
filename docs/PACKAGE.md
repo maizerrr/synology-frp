@@ -39,6 +39,7 @@ python3 -m pytest -q --basetemp=./.pytest-tmp
 - **UI 与 frpc 分开守护**：`start-stop-status` 只管 UI 进程；frpc 由 UI 托管，所以配置写坏时 UI 还活着、能告诉你错在哪（卸载/停止时两进程一起收）。
 - **窗口是 DSM 原生小浮动窗口**：`INFO` 的 `dsmappname` 用 `SYNO.SDS.SynologyFrp.Application`；`ui/config` 以 `SynologyFrp.js` 为键，登记 `Application`（`type:"app"`，菜单入口）与 `MainWindow`（`type:"lib"`，窗口本体）。
 - **必须用 Ext JS 3 的写法**：DSM 桌面加载的是 Ext JS **3.4**（`/scripts/ext-3/ext-all.js`），`Ext.define` / `this.callParent` 是 Ext 4 的 API，在 3.4 上父类解析为 null，构造直接抛 `Cannot read properties of null (reading 'apply')`。所以类用 `Ext.extend(基类, {...})` 定义、构造里用 `superclass.constructor.call(this, ...)`；组件类名是 `Ext.form.TextArea` 而不是 `Ext.form.field.TextArea`；`Ext.create` 也不能用。窗口创建失败时 DSM 会留下一个永远 loading、关不掉的任务栏标签，症状具有误导性。
+- **配置回填要防「字段被重置」**：DSM 在窗口首次 show 之后会把表单字段清空，而 Ext 3 的 `setValue` 会走校验链（`errorMsgEl` 此时是 undefined），直接抛错、内容永远填不进去。正确做法是直接写 `el.dom.value`，并在首次加载后补两次（400ms / 1500ms），轮询里也继续补；一旦用户按过键（`input` 事件）就不再回填，避免盖掉正在编辑的内容。
 - 窗口内是原生 Ext 控件：logo、一行说明、状态行、配置 TextArea、保存按钮。不用 iframe，也不塞大页面。
 - **API 走 DSM 自己的 nginx，但要按 DSM 7.2 的 `web-config` 声明**：光放一个 `conf/nginx/nginx.conf.template` DSM **不会**接管（实测在任何端口都不生效，请求落到 DSM 自己的 403 页）。正确做法是在 `conf/resource` 里登记
   `{"web-config": {"nginx-static-config": {"enable": [{"type": "dsm", "relpath": "nginx/api.conf"}]}}}`，

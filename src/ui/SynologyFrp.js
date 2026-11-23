@@ -159,26 +159,53 @@
 
             SYNO.SDS.SynologyFrp.MainWindow.superclass.constructor.call(this, config);
 
-            me.on('afterrender', function () { me.load(); });
+            me.on('afterrender', function () {
+                // 用户一旦在框里敲过字，就再也不自动回填
+                var el = me.editor.getEl();
+                if (el && el.dom && el.dom.addEventListener) {
+                    el.dom.addEventListener('input', function () { me.userEdited = true; });
+                }
+                me.load();
+            });
             me.pollId = window.setInterval(function () { me.refreshStatus(); }, 5000);
         },
 
         load: function () {
             var me = this;
             request('GET', '/state', undefined, function (data) {
-                if (data.content && !me.editor.getValue()) {
-                    me.editor.setValue(data.content);
-                }
+                me.applyContent(data);
                 me.showStatus(data.status);
+                // DSM 会在窗口首次 show 之后重置表单字段，补两次；applyContent
+                // 只有在内容仍未落到 DOM 时才会动手，所以不会盖掉用户的编辑。
+                Ext.defer(function () { me.applyContent(data); }, 400);
+                Ext.defer(function () { me.applyContent(data); }, 1500);
             }, function (message) {
                 me.showStatusText('未连接后台服务：' + message);
             });
+        },
+
+        // 服务端内容按需回填：DSM 会在窗口首次 show 之后把表单字段清空，
+        // 所以不能「填一次就完事」。一旦用户自己动过内容，就再也不回填。
+        // 直接写 DOM：Ext 3 的 setValue 会走 validate 链，字段被重置后
+        // errorMsgEl 是 undefined，会抛 "Cannot read properties of undefined"。
+        applyContent: function (data) {
+            var me = this;
+            if (data && typeof data.content === 'string' && data.content) {
+                me.desiredContent = data.content;
+            }
+            if (me.userEdited || !me.desiredContent) { return; }
+            var el = me.editor.getEl();
+            if (!el || !el.dom) { return; }
+            if (el.dom.value === me.desiredContent) { return; }
+            if (el.dom.value !== '') { return; }
+            el.dom.value = me.desiredContent;
         },
 
         refreshStatus: function () {
             var me = this;
             if (me.destroyed) { return; }
             request('GET', '/state', undefined, function (data) {
+                me.applyContent(data);
                 me.showStatus(data.status);
             }, function () {
                 me.showStatusText('未连接后台服务');
@@ -204,8 +231,11 @@
                 return;
             }
             request('PUT', '/file', { content: content }, function (data) {
-                if (data.state && data.state.content) {
-                    me.editor.setValue(data.state.content);
+                // 服务端会把内容整理后回写，直接改 DOM（setValue 会走校验链）
+                if (data.state && typeof data.state.content === 'string') {
+                    me.desiredContent = data.state.content;
+                    var el = me.editor.getEl();
+                    if (el && el.dom) { el.dom.value = me.desiredContent; }
                 }
                 if (data.started) {
                     Ext.Msg.alert('已保存', '配置已保存，frpc 已用新配置重启。');

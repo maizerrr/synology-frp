@@ -228,3 +228,29 @@ def test_bundle_uses_ext3_idioms(payload):
     assert "Ext.form.field." not in bundle, "that namespace is Ext 4"
     assert "appWindowName" in bundle
     assert "tag: 'iframe'" not in bundle
+
+
+def test_content_fill_survives_a_field_reset(payload):
+    """DSM clears the field after the window is shown; setValue then throws.
+
+    Ext 3's setValue runs the validation chain, and errorMsgEl is undefined once
+    the field has been reset, so the value never reaches the textarea.
+    """
+    bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    assert "applyContent" in bundle
+    assert "el.dom.value = me.desiredContent" in bundle
+    assert "me.editor.setValue" not in bundle, "setValue throws after a DSM field reset"
+    assert "userEdited" in bundle, "never overwrite what the user is typing"
+
+
+def test_content_fill_survives_a_field_reset(payload):
+    """DSM clears the field after the window is shown; setValue then throws.
+
+    Ext 3's setValue runs the validation chain, and errorMsgEl is undefined once
+    the field has been reset, so the value never reaches the textarea.
+    """
+    bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    assert "applyContent" in bundle
+    assert "el.dom.value = me.desiredContent" in bundle
+    assert "me.editor.setValue" not in bundle, "setValue throws after a DSM field reset"
+    assert "userEdited" in bundle, "never overwrite what the user is typing"
