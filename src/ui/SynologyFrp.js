@@ -1,50 +1,66 @@
-/* FRP 客户端 —— DSM 原生小窗口。
+/* FRP 客户端 —— DSM 原生窗口。
  *
- * 依据 DSM 7.2+ 的实测配方（ExtJS）：
- *   INFO.dsmappname        = SYNO.SDS.SynologyFrp.Application
- *   ui/config              = 登记 Application(type:app) + MainWindow(type:lib) + Utils
- *   Application 继承 SYNO.SDS.AppInstance，appWindowName 指到 MainWindow
- *   MainWindow  继承 SYNO.SDS.AppWindow，必须先把 appInstance 接过来再 callParent
- * 缺任何一条，DSM 都会建出任务栏标签但窗口对象为 null（表现为一直 loading、关不掉）。
+ * 事实（在 DSM 7.4 上实测得来）：
+ *   - DSM 桌面加载的是 Ext JS 3.4.0（/scripts/ext-3/ext-all.js），不是 Ext 4。
+ *   - 所以必须用 Ext.extend + superclass.constructor.call；
+ *     Ext.define / this.callParent 会拿到 null 的父类
+ *     （报 "TypeError: Cannot read properties of null (reading 'apply')"）。
+ *   - 组件类名是 Ext.form.TextArea；Ext.create 也不要用。
+ * 窗口创建失败时 DSM 会留下一个永远 loading 的任务栏标签，因此这里不吞异常。
  */
 (function () {
     'use strict';
 
     var NS = 'SYNO.SDS.SynologyFrp';
-    var API = '/webman/3rdparty/synology-frp/api';
+    var ASSET = '/webman/3rdparty/synology-frp/';
+    var API = ASSET + 'api';
 
-    // ------------------------------------------------------------------ utils
-    Ext.namespace(NS + '.Utils');
-    Ext.apply(SYNO.SDS.SynologyFrp.Utils, (function () {
-        return {
-            iconUrl: function () {
-                return '/webman/3rdparty/synology-frp/images/icon_256.png?ts=' + new Date().getTime();
-            },
-            duration: function (seconds) {
-                var value = Number(seconds) || 0;
-                if (value < 60) { return value + ' 秒'; }
-                var minutes = Math.floor(value / 60);
-                if (minutes < 60) { return minutes + ' 分钟'; }
-                var hours = Math.floor(minutes / 60);
-                if (hours < 24) { return hours + ' 小时'; }
-                return Math.floor(hours / 24) + ' 天';
-            },
-            statusText: function (status) {
-                if (!status || !status.running) { return '当前状态：已停止'; }
-                var text = '当前状态：运行中';
-                if (status.connected === false) {
-                    text += '（未连上服务器）';
-                } else if (status.connected === true) {
-                    text += '（已连上）';
-                }
-                if (status.version) { text += ' · v' + status.version; }
-                text += ' · 已运行 ' + SYNO.SDS.SynologyFrp.Utils.duration(status.uptime);
-                return text;
+    Ext.namespace('SYNO.SDS.SynologyFrp');
+
+    console.log('[frp] runtime', {
+        ext: Ext.version,
+        appInstance: typeof SYNO.SDS.AppInstance,
+        appWindow: typeof SYNO.SDS.AppWindow,
+        windowMgr: typeof SYNO.SDS.WindowMgr,
+        taskBar: typeof SYNO.SDS.TaskBar
+    });
+
+    // ---------------------------------------------------------------- helpers
+    function iconUrl() {
+        return ASSET + 'images/icon_256.png?ts=' + new Date().getTime();
+    }
+
+    function duration(seconds) {
+        var value = Number(seconds) || 0;
+        if (value < 60) { return value + ' 秒'; }
+        var minutes = Math.floor(value / 60);
+        if (minutes < 60) { return minutes + ' 分钟'; }
+        var hours = Math.floor(minutes / 60);
+        if (hours < 24) { return hours + ' 小时'; }
+        return Math.floor(hours / 24) + ' 天';
+    }
+
+    function statusText(status) {
+        if (!status || !status.running) { return '当前状态：已停止'; }
+        var text = '当前状态：运行中';
+        if (status.connected === false) {
+            text += '（未连上服务器）';
+        } else if (status.connected === true) {
+            text += '（已连上）';
+        }
+        if (status.version) { text += ' · v' + status.version; }
+        return text + ' · 已运行 ' + duration(status.uptime);
+    }
+
+    function synoToken() {
+        try {
+            if (SYNO.SDS.Session && SYNO.SDS.Session.SynoToken) {
+                return SYNO.SDS.Session.SynoToken;
             }
-        };
-    }()));
+        } catch (e) { /* ignore */ }
+        return '';
+    }
 
-    // --------------------------------------------------------------- io calls
     function request(method, path, payload, onOk, onFail) {
         var options = {
             url: API + path,
@@ -58,92 +74,93 @@
             failure: function (response) {
                 var data = {};
                 try { data = response.responseText ? Ext.decode(response.responseText) : {}; } catch (e) { data = {}; }
-                if (onFail) { onFail(data.message || ('请求失败（' + response.status + '）'), response.status); }
+                if (onFail) { onFail(data.message || ('请求失败（HTTP ' + response.status + '）')); }
             }
         };
+        var token = synoToken();
+        if (token) { options.headers.SynoToken = token; }
         if (payload !== undefined) {
             options.headers['Content-Type'] = 'application/json';
-            options.rawData = Ext.encode(payload);
+            options.jsonData = payload;
         }
         Ext.Ajax.request(options);
     }
 
-    // ------------------------------------------------------------- application
-    Ext.define(NS + '.Application', {
-        extend: 'SYNO.SDS.AppInstance',
+    // ------------------------------------------------------------ application
+    SYNO.SDS.SynologyFrp.Application = Ext.extend(SYNO.SDS.AppInstance, {
         appWindowName: NS + '.MainWindow',
-        constructor: function () {
-            this.callParent(arguments);
+
+        constructor: function (config) {
+            // Ext 3 的父类构造调用；不能写 this.callParent()
+            SYNO.SDS.SynologyFrp.Application.superclass.constructor.call(this, config);
         }
     });
 
-    Ext.define(NS + '.MainWindow', {
-        extend: 'SYNO.SDS.AppWindow',
+    // ----------------------------------------------------------------- window
+    SYNO.SDS.SynologyFrp.MainWindow = Ext.extend(SYNO.SDS.AppWindow, {
 
-        constructor: function (cfg) {
+        constructor: function (config) {
+            config = config || {};
+
             var me = this;
-            // DSM may instantiate the window without a config object: guard before
-            // touching cfg, otherwise the constructor throws and no window appears.
-            cfg = cfg || {};
-            me.appInstance = cfg.appInstance || me.appInstance;
+            me.appInstance = config.appInstance || me.appInstance;
 
-            me.editor = Ext.create('Ext.form.field.TextArea', {
-                itemId: 'content',
+            me.statusEl = new Ext.BoxComponent({
+                autoEl: {
+                    tag: 'div',
+                    html: '<div style="color:#8a929c;font-size:12px;padding:0 0 8px">正在读取状态…</div>'
+                }
+            });
+
+            me.editor = new Ext.form.TextArea({
                 hideLabel: true,
                 flex: 1,
-                resizable: false,
-                fieldStyle: 'font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;resize:none;'
+                style: 'font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;'
             });
 
-            me.statusLine = Ext.create('Ext.Component', {
-                itemId: 'statusLine',
-                margin: '0 0 8 0',
-                html: '<div style="color:#8a929c;font-size:12px">正在读取状态…</div>'
-            });
-
-            cfg = Ext.apply({
-                width: 760,
-                height: 500,
-                layout: 'fit',
-                items: [{
-                    xtype: 'panel',
-                    border: false,
-                    bodyPadding: '16 18 16 18',
-                    layout: { type: 'vbox', align: 'stretch' },
-                    items: [
-                        {
-                            xtype: 'component',
-                            html: '<div style="text-align:center"><img src="' +
-                                SYNO.SDS.SynologyFrp.Utils.iconUrl() +
-                                '" style="width:88px;height:88px;border-radius:50%;" alt=""></div>'
-                        },
-                        {
-                            xtype: 'component',
-                            margin: '10 0 6 0',
-                            html: '<div style="text-align:center;color:#5c6672;font-size:13px">' +
-                                '套件全局参数配置，保存后会自动重启套件生效！！！</div>'
-                        },
-                        me.statusLine,
-                        me.editor,
-                        {
-                            xtype: 'container',
-                            margin: '12 0 0 0',
-                            layout: { type: 'hbox', pack: 'center' },
-                            items: [{
-                                xtype: 'button',
-                                text: '保存',
-                                width: 96,
-                                handler: function () { me.save(); }
-                            }]
+            var content = new Ext.form.FormPanel({
+                border: false,
+                bodyStyle: 'padding:16px 18px;background:#fff',
+                layout: 'vbox',
+                layoutConfig: { align: 'stretch' },
+                items: [
+                    new Ext.BoxComponent({
+                        autoEl: {
+                            tag: 'div',
+                            html: '<div style="text-align:center;padding:2px 0 10px">' +
+                                '<img src="' + iconUrl() + '" width="88" height="88" ' +
+                                'style="border-radius:44px" alt=""></div>'
                         }
-                    ]
-                }]
-            }, cfg || {});
+                    }),
+                    new Ext.BoxComponent({
+                        autoEl: {
+                            tag: 'div',
+                            html: '<div style="text-align:center;color:#5c6672;font-size:13px;' +
+                                'padding:0 0 10px">套件全局参数配置，保存后会自动重启套件生效！！！</div>'
+                        }
+                    }),
+                    me.statusEl,
+                    me.editor
+                ],
+                buttons: [{
+                    text: '保存',
+                    width: 96,
+                    handler: function () { me.save(); }
+                }],
+                buttonAlign: 'center'
+            });
 
-            me.callParent([cfg]);
+            config = Ext.apply({
+                width: 760,
+                height: 520,
+                layout: 'fit',
+                items: [content]
+            }, config);
+
+            SYNO.SDS.SynologyFrp.MainWindow.superclass.constructor.call(this, config);
 
             me.on('afterrender', function () { me.load(); });
-            me.pollTimer = window.setInterval(function () { me.refreshStatus(); }, 4000);
+            me.pollId = window.setInterval(function () { me.refreshStatus(); }, 5000);
         },
 
         load: function () {
@@ -154,7 +171,7 @@
                 }
                 me.showStatus(data.status);
             }, function (message) {
-                me.setStatusHtml('未连接后台服务：' + message, '#d93025');
+                me.showStatusText('未连接后台服务：' + message);
             });
         },
 
@@ -164,21 +181,19 @@
             request('GET', '/state', undefined, function (data) {
                 me.showStatus(data.status);
             }, function () {
-                me.setStatusHtml('未连接后台服务', '#d93025');
+                me.showStatusText('未连接后台服务');
             });
         },
 
         showStatus: function (status) {
-            var running = status && status.running;
-            this.setStatusHtml(SYNO.SDS.SynologyFrp.Utils.statusText(status), running ? '#8a929c' : '#8a929c');
+            this.showStatusText(statusText(status));
         },
 
-        setStatusHtml: function (text, color) {
-            var node = this.down('#statusLine');
-            if (node) {
-                node.update('<div style="color:' + (color || '#8a929c') + ';font-size:12px">' +
-                    Ext.util.Format.htmlEncode(text) + '</div>');
-            }
+        showStatusText: function (text) {
+            var el = this.statusEl && this.statusEl.getEl();
+            if (!el) { return; }
+            el.dom.innerHTML = '<div style="color:#8a929c;font-size:12px;padding:0 0 8px">' +
+                Ext.util.Format.htmlEncode(text) + '</div>';
         },
 
         save: function () {
@@ -204,11 +219,11 @@
         },
 
         destroy: function () {
-            if (this.pollTimer) {
-                window.clearInterval(this.pollTimer);
-                this.pollTimer = null;
+            if (this.pollId) {
+                window.clearInterval(this.pollId);
+                this.pollId = null;
             }
-            this.callParent(arguments);
+            SYNO.SDS.SynologyFrp.MainWindow.superclass.destroy.apply(this, arguments);
         }
     });
 }());

@@ -30,7 +30,6 @@ find "$PKGROOT" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null
 find "$PKGROOT" -name '*.pyc' -delete 2>/dev/null || true
 
 cp -R "$ROOT/src/frontend/." "$PKGROOT/ui/"
-cp "$ROOT/src/frontend/selftest.html" "$PKGROOT/ui/selftest.html"
 cp "$ROOT/src/ui/config" "$PKGROOT/ui/config"
 cp "$ROOT"/src/ui/*.js "$PKGROOT/ui/"
 cp "$ROOT"/src/ui/images/icon_*.png "$PKGROOT/ui/images/"

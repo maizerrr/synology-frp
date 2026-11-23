@@ -151,9 +151,8 @@ def test_spk_is_an_uncompressed_tar(spk_path):
         head = handle.read(4)
     assert head == b"INFO", "spk must be an uncompressed tar (got %r)" % head
 
-
-def test_ui_config_declares_the_three_classes(payload, info):
-    """DSM 7.2+ needs app + window + utils registered, or the app never launches."""
+def test_ui_config_registers_app_and_window(payload, info):
+    """DSM resolves dsmappname in ui/config; the window class must be registered too."""
     ui = json.loads((payload / "ui" / "config").read_text(encoding="utf-8"))
     assert "SynologyFrp.js" in ui, "the config must name the JS bundle"
     classes = ui["SynologyFrp.js"]
@@ -167,21 +166,27 @@ def test_ui_config_declares_the_three_classes(payload, info):
 
     window = classes[app["appWindow"]]
     assert window["type"] == "lib", "the window class must be registered as lib"
-    assert "SYNO.SDS.SynologyFrp.Utils" in window["depend"]
-    assert "SYNO.SDS.SynologyFrp.Utils" in classes
 
 
-def test_bundle_defines_the_classes_dsm_expects(payload):
-    bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
-    assert 'extend: \'SYNO.SDS.AppInstance\'' in bundle
-    assert 'extend: \'SYNO.SDS.AppWindow\'' in bundle
+def test_bundle_uses_ext3_idioms(payload):
+    """DSM 7.4 ships Ext JS 3.4: Ext.define/callParent resolve to a null superclass."""
+    raw = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    # comments explain the Ext 4 pitfalls, so strip them before asserting
+    bundle = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+    bundle = re.sub(r"//[^\n]*", "", bundle)
+    bundle = re.sub(r"//[^\n]*", "", bundle)
+    assert "Ext.extend(SYNO.SDS.AppInstance" in bundle
+    assert "Ext.extend(SYNO.SDS.AppWindow" in bundle
+    assert "superclass.constructor.call" in bundle
+    assert "callParent" not in bundle, "Ext 3 has no working callParent"
+    assert "Ext.define" not in bundle, "Ext.define is Ext 4; DSM ships Ext 3.4"
+    assert "Ext.form.TextArea" in bundle
+    assert "Ext.form.field." not in bundle, "that namespace is Ext 4"
     assert "appWindowName" in bundle
-    assert "me.appInstance = cfg.appInstance" in bundle, "AppWindow needs the instance wired"
     assert "tag: 'iframe'" not in bundle
 
-
-def test_ui_config_declares_the_three_classes(payload, info):
-    """DSM 7.2+ needs app + window + utils registered, or the app never launches."""
+def test_ui_config_registers_app_and_window(payload, info):
+    """DSM resolves dsmappname in ui/config; the window class must be registered too."""
     ui = json.loads((payload / "ui" / "config").read_text(encoding="utf-8"))
     assert "SynologyFrp.js" in ui, "the config must name the JS bundle"
     classes = ui["SynologyFrp.js"]
@@ -195,14 +200,21 @@ def test_ui_config_declares_the_three_classes(payload, info):
 
     window = classes[app["appWindow"]]
     assert window["type"] == "lib", "the window class must be registered as lib"
-    assert "SYNO.SDS.SynologyFrp.Utils" in window["depend"]
-    assert "SYNO.SDS.SynologyFrp.Utils" in classes
 
 
-def test_bundle_defines_the_classes_dsm_expects(payload):
-    bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
-    assert 'extend: \'SYNO.SDS.AppInstance\'' in bundle
-    assert 'extend: \'SYNO.SDS.AppWindow\'' in bundle
+def test_bundle_uses_ext3_idioms(payload):
+    """DSM 7.4 ships Ext JS 3.4: Ext.define/callParent resolve to a null superclass."""
+    raw = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    # comments explain the Ext 4 pitfalls, so strip them before asserting
+    bundle = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+    bundle = re.sub(r"//[^\n]*", "", bundle)
+    bundle = re.sub(r"//[^\n]*", "", bundle)
+    assert "Ext.extend(SYNO.SDS.AppInstance" in bundle
+    assert "Ext.extend(SYNO.SDS.AppWindow" in bundle
+    assert "superclass.constructor.call" in bundle
+    assert "callParent" not in bundle, "Ext 3 has no working callParent"
+    assert "Ext.define" not in bundle, "Ext.define is Ext 4; DSM ships Ext 3.4"
+    assert "Ext.form.TextArea" in bundle
+    assert "Ext.form.field." not in bundle, "that namespace is Ext 4"
     assert "appWindowName" in bundle
-    assert "me.appInstance = cfg.appInstance" in bundle, "AppWindow needs the instance wired"
     assert "tag: 'iframe'" not in bundle
