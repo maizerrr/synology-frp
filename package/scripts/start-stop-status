@@ -12,6 +12,7 @@ start_service() {
     ensure_dirs || return 1
     if ! resolve_python; then
         echo "python3 not found on this DSM build" >&2
+        publish_diag
         return 1
     fi
     "$PYTHON_BIN" "${DEST_DIR}/backend/run.py" \
@@ -23,12 +24,15 @@ start_service() {
     tries=0
     while [ "$tries" -lt 20 ]; do
         if is_running; then
+            sleep 1
+            publish_diag
             return 0
         fi
         tries=$((tries + 1))
         sleep 0.5
     done
     echo "service failed to start, see ${LOG_DIR}/service.log" >&2
+    publish_diag
     return 1
 }
 

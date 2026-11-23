@@ -33,3 +33,51 @@ is_running() {
     [ -n "$pid" ] || return 1
     kill -0 "$pid" 2>/dev/null
 }
+
+# Without SSH there is no way to look at the DSM side of the story, so the
+# lifecycle scripts publish what they can see to a file inside the web-served
+# ui directory (/webman/3rdparty/<pkg>/_diag.txt). It is written on every
+# start attempt and contains no configuration content.
+publish_diag() {
+    target="${DEST_DIR}/ui/_diag.txt"
+    [ -d "${DEST_DIR}/ui" ] || return 0
+    {
+        echo "time: $(date)"
+        echo "pid file: $(cat "${VAR_DIR}/ui.pid" 2>/dev/null || echo none)"
+        echo "service running: $(is_running && echo yes || echo no)"
+        echo
+        echo "== python =="
+        for candidate in /usr/bin/python3 /usr/local/bin/python3 \
+            /var/packages/Python3/target/bin/python3 /var/packages/Python3.9/target/bin/python3; do
+            if [ -x "$candidate" ]; then
+                echo "  OK  ${candidate}  $("${candidate}" -V 2>&1)"
+            else
+                echo "  --  ${candidate}"
+            fi
+        done
+        echo
+        echo "== listening on ${PORT} =="
+        if command -v netstat >/dev/null 2>&1; then
+            netstat -tln 2>/dev/null | grep -E "[:.]${PORT}[[:space:]]" || echo "  (nothing)"
+        elif command -v ss >/dev/null 2>&1; then
+            ss -tln 2>/dev/null | grep -E "[:.]${PORT}[[:space:]]" || echo "  (nothing)"
+        else
+            echo "  (no netstat/ss)"
+        fi
+        echo
+        echo "== service.log (tail) =="
+        tail -30 "${LOG_DIR}/service.log" 2>/dev/null || echo "  (no log)"
+        echo
+        echo "== nginx: where our location ended up =="
+        for conf in /etc/nginx/nginx.conf /etc/nginx/conf.d/*.conf /etc/nginx/sites-enabled/*; do
+            [ -f "$conf" ] || continue
+            if grep -q "synology-frp" "$conf" 2>/dev/null; then
+                echo "  HIT  ${conf}"
+            fi
+        done
+        echo "  -- listen ports seen in conf.d --"
+        grep -rh "listen" /etc/nginx/conf.d/*.conf 2>/dev/null | sed 's/^ */    /' | sort -u | head -20
+        echo "  -- server_name blocks --"
+        grep -rh "server_name" /etc/nginx/conf.d/*.conf 2>/dev/null | sed 's/^ */    /' | sort -u | head -20
+    } >"$target" 2>&1 || true
+}
