@@ -24,7 +24,8 @@ docs/ACCEPTANCE.md        黑盒验收标准
 
 ```bash
 ./engine/build.sh     # 用 Docker 编译 frpc（产出 vendor/frpc/frpc，约 16 MB）
-./build.sh            # 组装 dist/synology-frp-1.0.0.spk
+./tools/bump.sh       # 改完代码先升版本号（默认 patch+1），否则群晖会复用老包缓存
+./build.sh            # 组装 dist/synology-frp-<version>.spk
 python3 -m pytest -q --basetemp=./.pytest-tmp
 ```
 
@@ -41,7 +42,7 @@ python3 -m pytest -q --basetemp=./.pytest-tmp
 
 ## 安装（真机）
 
-1. 套件中心 → 手动安装 → 选 `dist/synology-frp-1.0.0.spk`
+1. 套件中心 → 手动安装 → 选 `dist/synology-frp-<version>.spk`
 2. 主菜单「FRP 客户端」→ 打开 → 顶部状态显示「运行中 / 未连上服务器」
 3. 编辑器里把 `serverAddr` / `serverPort` 改成你的 frps，按需改 `[[proxies]]`
 4. 点「保存并重启」→ 状态变「已连上」，日志里出现 `login to server success`

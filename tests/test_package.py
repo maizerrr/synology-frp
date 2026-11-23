@@ -139,3 +139,14 @@ def test_payload_tarball_is_clean_too():
         for member in archive.getmembers():
             assert "PaxHeader" not in member.name, member.name
             assert not member.pax_headers, member.name
+
+
+def test_backend_version_matches_info(info):
+    """The version the UI reports must never drift from INFO."""
+    path = os.path.join(ROOT, "src", "backend", os.listdir(os.path.join(ROOT, "src", "backend"))[0], "app.py")
+    candidates = [p for p in __import__("glob").glob(os.path.join(ROOT, "src", "backend", "*", "app.py"))]
+    assert candidates
+    text = open(candidates[0], encoding="utf-8").read()
+    match = re.search(r'VERSION = "([^"]+)"', text)
+    assert match, "no VERSION constant"
+    assert match.group(1) == info["version"]

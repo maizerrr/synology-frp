@@ -1,5 +1,5 @@
 package="synology-frp"
-version="1.0.0"
+version="1.0.1"
 os_min_ver="7.0-40000"
 arch="x86_64 x64 apollolake avoton braswell broadwell broadwellnk broadwellnkv2 broadwellntbap denverton epyc7002 geminilake geminilakenk grantley kvmx64 purley r1000 r1000nk v1000 v1000nk dockerx64"
 description="FRP client (frpc) with an in-DSM config editor"
