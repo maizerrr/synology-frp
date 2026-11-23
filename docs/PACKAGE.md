@@ -37,8 +37,9 @@ python3 -m pytest -q --basetemp=./.pytest-tmp
 - **`web/frpc/dist` 占位**：`web/frpc/embed.go` 里有 `//go:embed dist`，而 dist 是 npm 构建产物、仓库里没有。我们不发布 frpc 自带的 dashboard，所以构建时放一个占位 `index.html` 让 embed 能解析。
 - **默认模板含 `loginFailExit = false`**：实测 frp 0.72 默认「首次登录失败就退出」，在 NAS 上等于服务器抖一下隧道就永久断了。设为 false 后它会一直重试。
 - **UI 与 frpc 分开守护**：`start-stop-status` 只管 UI 进程；frpc 由 UI 托管，所以配置写坏时 UI 还活着、能告诉你错在哪（卸载/停止时两进程一起收）。
-- **窗口走官方 Vue 路线**：DSM 7.2 起桌面与任务栏是 Vue 的，ExtJS 的 `SYNO.SDS.AppWindow` 注册不上（任务栏关闭会报 `closeWindow` 读到 null）。现在的写法与官方 "Launch an App" 示例一致：`ui/config` 里一个 `type: "app"` 类，`appWindow` 指向它自己；`ui/app.js` 用 `Vue.extend` 定义该类，`render` 里返回 `<v-app-instance>` → `<v-app-window>`，窗口内容用纯 DOM 渲染（**不用 iframe**），数据经同源反代访问包内后端。
-- `ui/index.html` 仍保留，但只是排查用的静态页：浏览器直接打开 `/webman/3rdparty/synology-frp/index.html` 可以验证"后端 + 反代"是否通，正式界面不依赖它。
+- **窗口是 DSM 原生小浮动窗口**：`INFO` 的 `dsmappname` 用 `SYNO.SDS.SynologyFrp.Application`；`ui/config` 以 `SynologyFrp.js` 为键，登记三个类 —— `Application`（`type:"app"`，菜单入口）、`MainWindow`（`type:"lib"`，窗口本体）、`Utils`（工具方法）。`ui/SynologyFrp.js` 里 `Application` 继承 `SYNO.SDS.AppInstance`、`MainWindow` 继承 `SYNO.SDS.AppWindow`，并且**必须先把 `appInstance` 接过来再 callParent**。三者缺一，DSM 会建出任务栏标签但窗口为 null（表现为一直 loading、关不掉）。
+- 窗口内是原生 ExtJS 控件：logo、一行说明、状态行、配置 TextArea、保存按钮。不用 iframe，也不塞大页面。
+- `ui/index.html` 保留作排查页：浏览器直接打开 `/webman/3rdparty/synology-frp/index.html` 可验证"后端 + 反代"链路。
 - **端口 9844 仅监听 127.0.0.1**，浏览器侧走 DSM 同源反代，登录态由 DSM 兜住，套件内不自建账号。
 - **配置文件在套件私有目录**（`/var/packages/synology-frp/var/frpc.toml|.ini`），卸载默认保留，重装自动接回。
 

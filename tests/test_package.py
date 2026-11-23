@@ -152,49 +152,57 @@ def test_spk_is_an_uncompressed_tar(spk_path):
     assert head == b"INFO", "spk must be an uncompressed tar (got %r)" % head
 
 
-def test_ui_config_declares_a_vue_window_app(payload, info):
-    """Official pattern: one Vue class, used as its own appWindow."""
+def test_ui_config_declares_the_three_classes(payload, info):
+    """DSM 7.2+ needs app + window + utils registered, or the app never launches."""
     ui = json.loads((payload / "ui" / "config").read_text(encoding="utf-8"))
-    assert "app.js" in ui, "ui/config must name the JS bundle"
-    classes = {}
-    for entries in ui.values():
-        classes.update(entries)
+    assert "SynologyFrp.js" in ui, "the config must name the JS bundle"
+    classes = ui["SynologyFrp.js"]
+
+    assert info["dsmappname"] == "SYNO.SDS.SynologyFrp.Application"
 
     app = classes[info["dsmappname"]]
     assert app["type"] == "app"
     assert app["allUsers"] is True
-    assert app["appWindow"] == info["dsmappname"]
+    assert app["appWindow"] == "SYNO.SDS.SynologyFrp.MainWindow"
+
+    window = classes[app["appWindow"]]
+    assert window["type"] == "lib", "the window class must be registered as lib"
+    assert "SYNO.SDS.SynologyFrp.Utils" in window["depend"]
+    assert "SYNO.SDS.SynologyFrp.Utils" in classes
 
 
-def test_window_is_a_vue_component_not_an_iframe(payload):
-    """DSM 7.2+ desktop/taskbar is Vue; ExtJS windows never register with it."""
-    bundle = (payload / "ui" / "app.js").read_text(encoding="utf-8")
-    assert "Vue.extend" in bundle
-    assert "v-app-instance" in bundle
-    assert "v-app-window" in bundle
+def test_bundle_defines_the_classes_dsm_expects(payload):
+    bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    assert 'extend: \'SYNO.SDS.AppInstance\'' in bundle
+    assert 'extend: \'SYNO.SDS.AppWindow\'' in bundle
+    assert "appWindowName" in bundle
+    assert "me.appInstance = cfg.appInstance" in bundle, "AppWindow needs the instance wired"
     assert "tag: 'iframe'" not in bundle
-    assert "Ext.define" not in bundle, "the ExtJS window does not work on DSM 7.4"
 
 
-def test_ui_config_declares_a_vue_window_app(payload, info):
-    """Official pattern: one Vue class, used as its own appWindow."""
+def test_ui_config_declares_the_three_classes(payload, info):
+    """DSM 7.2+ needs app + window + utils registered, or the app never launches."""
     ui = json.loads((payload / "ui" / "config").read_text(encoding="utf-8"))
-    assert "app.js" in ui, "ui/config must name the JS bundle"
-    classes = {}
-    for entries in ui.values():
-        classes.update(entries)
+    assert "SynologyFrp.js" in ui, "the config must name the JS bundle"
+    classes = ui["SynologyFrp.js"]
+
+    assert info["dsmappname"] == "SYNO.SDS.SynologyFrp.Application"
 
     app = classes[info["dsmappname"]]
     assert app["type"] == "app"
     assert app["allUsers"] is True
-    assert app["appWindow"] == info["dsmappname"]
+    assert app["appWindow"] == "SYNO.SDS.SynologyFrp.MainWindow"
+
+    window = classes[app["appWindow"]]
+    assert window["type"] == "lib", "the window class must be registered as lib"
+    assert "SYNO.SDS.SynologyFrp.Utils" in window["depend"]
+    assert "SYNO.SDS.SynologyFrp.Utils" in classes
 
 
-def test_window_is_a_vue_component_not_an_iframe(payload):
-    """DSM 7.2+ desktop/taskbar is Vue; ExtJS windows never register with it."""
-    bundle = (payload / "ui" / "app.js").read_text(encoding="utf-8")
-    assert "Vue.extend" in bundle
-    assert "v-app-instance" in bundle
-    assert "v-app-window" in bundle
+def test_bundle_defines_the_classes_dsm_expects(payload):
+    bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    assert 'extend: \'SYNO.SDS.AppInstance\'' in bundle
+    assert 'extend: \'SYNO.SDS.AppWindow\'' in bundle
+    assert "appWindowName" in bundle
+    assert "me.appInstance = cfg.appInstance" in bundle, "AppWindow needs the instance wired"
     assert "tag: 'iframe'" not in bundle
-    assert "Ext.define" not in bundle, "the ExtJS window does not work on DSM 7.4"

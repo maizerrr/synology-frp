@@ -1,13 +1,25 @@
 {
-  "app.js": {
-    "SYNO.SDS.SynologyFrp.Instance": {
+  "SynologyFrp.js": {
+    "SYNO.SDS.SynologyFrp.Application": {
       "type": "app",
       "title": "FRP 客户端",
       "desc": "内网穿透客户端配置",
       "icon": "images/icon_72.png",
-      "appWindow": "SYNO.SDS.SynologyFrp.Instance",
+      "appWindow": "SYNO.SDS.SynologyFrp.MainWindow",
+      "allowMultiInstance": false,
+      "allowStandalone": true,
+      "allowSharing": true,
       "allUsers": true,
-      "allowMultiInstance": false
-    }
+      "grantPrivilege": "all",
+      "advanceGrantPrivilege": true,
+      "depend": ["SYNO.SDS.SynologyFrp.MainWindow"]
+    },
+    "SYNO.SDS.SynologyFrp.MainWindow": {
+      "type": "lib",
+      "title": "FRP 客户端",
+      "icon": "images/icon_72.png",
+      "depend": ["SYNO.SDS.SynologyFrp.Utils"]
+    },
+    "SYNO.SDS.SynologyFrp.Utils": []
   }
 }

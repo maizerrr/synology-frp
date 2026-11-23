@@ -31,7 +31,7 @@ find "$PKGROOT" -name '*.pyc' -delete 2>/dev/null || true
 
 cp -R "$ROOT/src/frontend/." "$PKGROOT/ui/"
 cp "$ROOT/src/ui/config" "$PKGROOT/ui/config"
-cp "$ROOT/src/ui/app.js" "$PKGROOT/ui/app.js"
+cp "$ROOT"/src/ui/*.js "$PKGROOT/ui/"
 cp "$ROOT"/src/ui/images/icon_*.png "$PKGROOT/ui/images/"
 
 if [ -f "$ROOT/vendor/frpc/frpc" ]; then
