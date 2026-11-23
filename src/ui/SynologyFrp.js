@@ -26,6 +26,26 @@
     });
 
     // ---------------------------------------------------------------- helpers
+    // Ext 3 的按钮在 DSM 主题下会退化成纯文字，所以保存用真实的 <button>，
+    // 样式对齐 DSM 主按钮（蓝色实心、4px 圆角、30px 高）。
+    var CSS = [
+        '.frp-footer{text-align:center;padding:12px 0 2px}',
+        '.frp-btn{min-width:112px;height:30px;padding:0 18px;border-radius:4px;',
+        'border:1px solid #1f7ae0;background:#1f7ae0;color:#fff;cursor:pointer;',
+        'font:13px/1.4 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;}',
+        '.frp-btn:hover{background:#1565d8;border-color:#1565d8}',
+        '.frp-btn:active{background:#0f56bd;border-color:#0f56bd}',
+        '.frp-btn[disabled]{opacity:.5;cursor:default}'
+    ].join('');
+
+    function ensureStyle() {
+        if (document.getElementById('frp-window-style')) { return; }
+        var style = document.createElement('style');
+        style.id = 'frp-window-style';
+        style.appendChild(document.createTextNode(CSS));
+        document.head.appendChild(style);
+    }
+
     function iconUrl() {
         return ASSET + 'images/icon_256.png?ts=' + new Date().getTime();
     }
@@ -104,6 +124,7 @@
 
             var me = this;
             me.appInstance = config.appInstance || me.appInstance;
+            ensureStyle();
 
             me.statusEl = new Ext.BoxComponent({
                 autoEl: {
@@ -140,14 +161,16 @@
                         }
                     }),
                     me.statusEl,
-                    me.editor
-                ],
-                buttons: [{
-                    text: '保存',
-                    width: 96,
-                    handler: function () { me.save(); }
-                }],
-                buttonAlign: 'center'
+                    me.editor,
+                    new Ext.BoxComponent({
+                        autoEl: {
+                            tag: 'div',
+                            html: '<div class="frp-footer">' +
+                                '<button type="button" class="frp-btn" data-el="save">保存并重启</button>' +
+                                '</div>'
+                        }
+                    })
+                ]
             });
 
             config = Ext.apply({
@@ -164,6 +187,10 @@
                 var el = me.editor.getEl();
                 if (el && el.dom && el.dom.addEventListener) {
                     el.dom.addEventListener('input', function () { me.userEdited = true; });
+                }
+                var saveBtn = me.getEl().dom.querySelector('[data-el="save"]');
+                if (saveBtn) {
+                    saveBtn.addEventListener('click', function () { me.save(); });
                 }
                 me.load();
             });

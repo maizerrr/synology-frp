@@ -254,3 +254,12 @@ def test_content_fill_survives_a_field_reset(payload):
     assert "el.dom.value = me.desiredContent" in bundle
     assert "me.editor.setValue" not in bundle, "setValue throws after a DSM field reset"
     assert "userEdited" in bundle, "never overwrite what the user is typing"
+
+
+def test_save_is_a_real_button(payload):
+    """Ext 3 buttons lose their chrome under the DSM theme: use a real <button>."""
+    bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    assert "保存并重启" in bundle
+    assert '<button type="button"' in bundle
+    assert ".frp-btn{" in bundle
+    assert "buttons: [" not in bundle, "Ext 3 button widgets render as bare text in DSM"
