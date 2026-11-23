@@ -82,7 +82,10 @@
 
         constructor: function (cfg) {
             var me = this;
-            me.appInstance = cfg.appInstance;
+            // DSM may instantiate the window without a config object: guard before
+            // touching cfg, otherwise the constructor throws and no window appears.
+            cfg = cfg || {};
+            me.appInstance = cfg.appInstance || me.appInstance;
 
             me.editor = Ext.create('Ext.form.field.TextArea', {
                 itemId: 'content',

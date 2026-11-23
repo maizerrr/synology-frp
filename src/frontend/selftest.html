@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>FRP 客户端 · 自检</title>
+<style>
+  body{font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;margin:0;padding:24px;background:#f2f4f7;color:#1d2129}
+  h1{font-size:16px;margin:0 0 4px}
+  p.sub{color:#6b7280;margin:0 0 16px;font-size:13px}
+  .card{background:#fff;border:1px solid #e2e6ec;border-radius:10px;padding:16px 18px;margin-bottom:14px}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  td{padding:6px 0;border-bottom:1px solid #f0f2f5;vertical-align:top}
+  td.k{width:220px;color:#6b7280}
+  code{font:12px ui-monospace,Menlo,monospace;background:#f5f7fa;padding:1px 5px;border-radius:4px}
+  .ok{color:#1e6b32;font-weight:600}
+  .bad{color:#d93025;font-weight:600}
+  pre{background:#0f1419;color:#d7e0ea;padding:10px 12px;border-radius:8px;font:12px/1.6 ui-monospace,Menlo,monospace;overflow:auto;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<h1>FRP 客户端 · 运行环境自检</h1>
+<p class="sub">这个页面用来判断 DSM 7.4 到底提供了哪一套 UI 框架，以及我们的 app.js 有没有被正确加载。请把整页内容截图或复制给我。</p>
+
+<div class="card">
+  <table id="env"><tbody></tbody></table>
+</div>
+
+<div class="card">
+  <div style="margin-bottom:8px;color:#6b7280;font-size:13px">尝试加载 <code>SynologyFrp.js</code> 后的注册结果</div>
+  <table id="classes"><tbody></tbody></table>
+</div>
+
+<div class="card">
+  <div style="margin-bottom:8px;color:#6b7280;font-size:13px">加载时的脚本错误</div>
+  <pre id="errors">（无）</pre>
+</div>
+
+<script>
+window.__loadErrors = [];
+window.addEventListener('error', function (event) {
+  window.__loadErrors.push(String(event.message || event.error || 'unknown'));
+}, true);
+</script>
+
+<script>
+(function () {
+  function row(label, value, cls) {
+    return '<tr><td class="k">' + label + '</td><td class="' + (cls || '') + '">' + value + '</td></tr>';
+  }
+  function typeOf(name) {
+    try {
+      var value = eval('typeof ' + name);
+      return value;
+    } catch (e) {
+      return 'throws';
+    }
+  }
+
+  var env = [
+    ['Ext（ExtJS 框架）', typeOf('Ext')],
+    ['Vue（Vue 框架）', typeOf('Vue')],
+    ['SYNO', typeOf('SYNO')],
+    ['SYNO.namespace', typeOf('SYNO') === 'object' ? typeof SYNO.namespace : 'n/a'],
+    ['SYNO.SDS', typeOf('SYNO') === 'object' ? typeof SYNO.SDS : 'n/a'],
+    ['Ext.define（ExtJS 4+）', typeOf('Ext') === 'object' ? typeof Ext.define : 'n/a'],
+    ['SYNO.SDS.AppWindow（ExtJS 窗口类）', typeOf('SYNO') === 'object' ? typeof SYNO.SDS.AppWindow : 'n/a'],
+    ['SYNO.SDS.AppInstance（ExtJS 应用类）', typeOf('SYNO') === 'object' ? typeof SYNO.SDS.AppInstance : 'n/a']
+  ];
+
+  var envHtml = env.map(function (item) {
+    var value = item[1];
+    var cls = (value === 'undefined' || value === 'throws') ? 'bad' : 'ok';
+    return row(item[0], value, cls);
+  }).join('');
+
+  envHtml += row('页面地址', location.href);
+  document.querySelector('#env tbody').innerHTML = envHtml;
+}());
+</script>
+
+<script src="SynologyFrp.js" onerror="window.__loadErrors.push('SynologyFrp.js 加载失败（404 或语法错误）')"></script>
+
+<script>
+(function () {
+  function row(label, value, cls) {
+    return '<tr><td class="k">' + label + '</td><td class="' + (cls || '') + '">' + value + '</td></tr>';
+  }
+  var rows = [];
+  var ns = (typeof SYNO !== 'undefined' && SYNO.SDS) ? SYNO.SDS.SynologyFrp : undefined;
+  rows.push(row('SYNO.SDS.SynologyFrp', ns ? '已定义' : '未定义', ns ? 'ok' : 'bad'));
+  ['Application', 'MainWindow', 'Utils'].forEach(function (name) {
+    var value = ns ? typeof ns[name] : 'n/a';
+    var ok = value === 'function' || value === 'object';
+    rows.push(row('SYNO.SDS.SynologyFrp.' + name, value, ok ? 'ok' : 'bad'));
+  });
+  document.querySelector('#classes tbody').innerHTML = rows.join('');
+
+  var errors = window.__loadErrors && window.__loadErrors.length
+    ? window.__loadErrors.join('\n')
+    : '（无）';
+  document.getElementById('errors').textContent = errors;
+}());
+</script>
+</body>
+</html>
