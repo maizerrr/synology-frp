@@ -263,3 +263,19 @@ def test_save_is_a_real_button(payload):
     assert '<button type="button"' in bundle
     assert ".frp-btn{" in bundle
     assert "buttons: [" not in bundle, "Ext 3 button widgets render as bare text in DSM"
+
+
+def test_save_is_bound_three_ways(payload):
+    """DSM's window can swallow bubbling, and getEl() may not reach the footer."""
+    bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    assert 'onclick="window.__frpSave' in bundle, "inline bridge"
+    assert "document.addEventListener('click'" in bundle, "delegated fallback"
+    assert "addEventListener('click'" in bundle, "direct binding on the button"
+    assert "if (me.saving) { return; }" in bundle, "one save per click"
+
+
+def test_footer_is_not_named_footer(payload):
+    """Ext 3's Panel uses this.footer internally; shadowing it breaks render."""
+    bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    assert "me.footer =" not in bundle
+    assert "this.footer =" not in bundle

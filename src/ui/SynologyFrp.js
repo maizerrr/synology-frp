@@ -40,10 +40,14 @@
 
     function ensureStyle() {
         if (document.getElementById('frp-window-style')) { return; }
-        var style = document.createElement('style');
-        style.id = 'frp-window-style';
-        style.appendChild(document.createTextNode(CSS));
-        document.head.appendChild(style);
+        // 不要用 document.createElement：Ext 3 覆写了它，传字符串会抛
+        // "parameter 1 is not of type 'Node'"。DomHelper 是 Ext 自己的实现。
+        var head = document.getElementsByTagName('head')[0] || document.body;
+        Ext.DomHelper.append(head, {
+            tag: 'style',
+            id: 'frp-window-style',
+            html: CSS
+        });
     }
 
     function iconUrl() {
@@ -162,12 +166,28 @@
                     }),
                     me.statusEl,
                     me.editor,
+                    // 注意：不要挂到 this.footer —— Ext 3 的 Panel 内部就用
+                    // 这个属性名，撞车会让渲染时 appendChild(undefined)。
                     new Ext.BoxComponent({
                         autoEl: {
                             tag: 'div',
                             html: '<div class="frp-footer">' +
-                                '<button type="button" class="frp-btn" data-el="save">保存并重启</button>' +
+                                '<button type="button" class="frp-btn" data-el="save" ' +
+                                'onclick="window.__frpSave&&window.__frpSave();return false;">保存并重启</button>' +
                                 '</div>'
+                        },
+                        listeners: {
+                            // 第三层保险：按钮自己身上的监听。DSM 的窗口管理器
+                            // 可能会吞掉冒泡到 document 的事件，这一层不受影响。
+                            afterrender: function (cmp) {
+                                var btn = cmp.getEl() && cmp.getEl().dom.querySelector('[data-el="save"]');
+                                if (btn) {
+                                    btn.addEventListener('click', function (event) {
+                                        event.preventDefault();
+                                        me.save();
+                                    });
+                                }
+                            }
                         }
                     })
                 ]
@@ -188,12 +208,22 @@
                 if (el && el.dom && el.dom.addEventListener) {
                     el.dom.addEventListener('input', function () { me.userEdited = true; });
                 }
-                var saveBtn = me.getEl().dom.querySelector('[data-el="save"]');
-                if (saveBtn) {
-                    saveBtn.addEventListener('click', function () { me.save(); });
-                }
                 me.load();
             });
+
+            // 保存按钮：DSM 的 AppWindow 里 getEl() 拿不到按钮所在的容器
+            // （querySelector 返回 null，点击等于没绑），所以在 document 上做
+            // 事件委托，与 DOM 层级无关。
+            me.saveClickHandler = function (event) {
+                var node = event.target;
+                if (node && node.getAttribute && node.getAttribute('data-el') === 'save') {
+                    event.preventDefault();
+                    me.save();
+                }
+            };
+            document.addEventListener('click', me.saveClickHandler);
+            // 内联 onclick 走这个桥；不依赖 DOM 层级，也不怕事件冒泡被拦
+            window.__frpSave = function () { me.save(); };
             me.pollId = window.setInterval(function () { me.refreshStatus(); }, 5000);
         },
 
@@ -252,12 +282,16 @@
 
         save: function () {
             var me = this;
-            var content = me.editor.getValue();
+            if (me.saving) { return; }   // 三层监听可能同时触发，只放一次
+            var inputEl = me.editor.getEl();
+            var content = (inputEl && inputEl.dom) ? inputEl.dom.value : me.editor.getValue();
             if (!content || !content.replace(/\s/g, '')) {
                 Ext.Msg.alert('无法保存', '配置内容不能为空。');
                 return;
             }
+            me.saving = true;
             request('PUT', '/file', { content: content }, function (data) {
+                me.saving = false;
                 // 服务端会把内容整理后回写，直接改 DOM（setValue 会走校验链）
                 if (data.state && typeof data.state.content === 'string') {
                     me.desiredContent = data.state.content;
@@ -271,6 +305,7 @@
                 }
                 me.showStatus(data.state && data.state.status);
             }, function (message) {
+                me.saving = false;
                 Ext.Msg.alert('保存失败', message);
             });
         },
@@ -280,6 +315,11 @@
                 window.clearInterval(this.pollId);
                 this.pollId = null;
             }
+            if (this.saveClickHandler) {
+                document.removeEventListener('click', this.saveClickHandler);
+                this.saveClickHandler = null;
+            }
+            if (window.__frpSave) { window.__frpSave = null; }
             SYNO.SDS.SynologyFrp.MainWindow.superclass.destroy.apply(this, arguments);
         }
     });
