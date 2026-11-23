@@ -168,3 +168,12 @@ def test_spk_is_an_uncompressed_tar(spk_path):
     with open(spk_path, "rb") as handle:
         head = handle.read(4)
     assert head == b"INFO", "spk must be an uncompressed tar (got %r)" % head
+
+
+def test_window_is_native_not_an_iframe(payload):
+    """The user asked for a native DSM window: widgets, not an embedded page."""
+    bundle = (payload / "ui" / "app.js").read_text(encoding="utf-8")
+    assert "tag: 'iframe'" not in bundle, "the window must not embed a page"
+    assert "Ext.define" in bundle
+    assert "SYNO.SDS.AppWindow" in bundle
+    assert "Ext.form.field.TextArea" in bundle, "the editor must be a native field"

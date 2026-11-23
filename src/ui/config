@@ -8,15 +8,12 @@
       "appWindow": "SYNO.SDS.SynologyFrp.MainWindow",
       "allUsers": true,
       "allowMultiInstance": false,
-      "allowStandalone": true,
       "depend": ["SYNO.SDS.SynologyFrp.MainWindow"]
     },
     "SYNO.SDS.SynologyFrp.MainWindow": {
       "type": "lib",
       "title": "FRP 客户端",
-      "icon": "images/icon_72.png",
-      "depend": ["SYNO.SDS.SynologyFrp.Utils"]
-    },
-    "SYNO.SDS.SynologyFrp.Utils": []
+      "icon": "images/icon_72.png"
+    }
   }
 }
