@@ -20,7 +20,7 @@ def spk_path():
 
 @pytest.fixture(scope="module")
 def info(spk_path):
-    with tarfile.open(spk_path, "r:gz") as archive:
+    with tarfile.open(spk_path, "r:*") as archive:
         text = archive.extractfile("INFO").read().decode("utf-8")
     pairs = {}
     for line in text.splitlines():
@@ -33,7 +33,7 @@ def info(spk_path):
 @pytest.fixture(scope="module")
 def payload(spk_path, tmp_path_factory):
     target = tmp_path_factory.mktemp("payload")
-    with tarfile.open(spk_path, "r:gz") as archive:
+    with tarfile.open(spk_path, "r:*") as archive:
         member = archive.extractfile("package.tgz")
         nested = target / "package.tgz"
         nested.write_bytes(member.read())
@@ -46,7 +46,7 @@ def payload(spk_path, tmp_path_factory):
 
 
 def test_spk_layout(spk_path):
-    with tarfile.open(spk_path, "r:gz") as archive:
+    with tarfile.open(spk_path, "r:*") as archive:
         names = set(archive.getnames())
     for required in ("INFO", "package.tgz", "PACKAGE_ICON.PNG",
                      "scripts/postinst", "scripts/start-stop-status",
@@ -59,14 +59,13 @@ def test_info_targets_x86_only(info):
     assert info["dsmuidir"] == "ui"
     assert info["os_min_ver"].startswith("7.")
     arch = info["arch"].split()
-    assert "x86_64" in arch
-    assert "v1000" in arch  # DS1621+
+    assert arch == ["x86_64"], "use the generic x86_64 arch, like the stock packages"
     for arm in ("aarch64", "armv7", "armada38x"):
         assert arm not in arch
 
 
 def test_privilege_drops_root(spk_path):
-    with tarfile.open(spk_path, "r:gz") as archive:
+    with tarfile.open(spk_path, "r:*") as archive:
         data = json.loads(archive.extractfile("conf/privilege").read().decode("utf-8"))
     assert data["defaults"]["run-as"] == "package"
 
@@ -99,7 +98,7 @@ def test_frontend_is_self_contained(payload):
 
 
 def test_scripts_are_valid_shell(spk_path, tmp_path):
-    with tarfile.open(spk_path, "r:gz") as archive:
+    with tarfile.open(spk_path, "r:*") as archive:
         for name in archive.getnames():
             if not name.startswith("scripts/"):
                 continue
@@ -111,7 +110,7 @@ def test_scripts_are_valid_shell(spk_path, tmp_path):
 
 
 def test_nginx_template_proxies_this_package(spk_path):
-    with tarfile.open(spk_path, "r:gz") as archive:
+    with tarfile.open(spk_path, "r:*") as archive:
         text = archive.extractfile("conf/nginx/nginx.conf.template").read().decode("utf-8")
     assert "/webman/3rdparty/synology-frp/api/" in text
     assert "127.0.0.1:9844" in text
@@ -119,13 +118,13 @@ def test_nginx_template_proxies_this_package(spk_path):
 
 def test_archive_starts_with_info(spk_path):
     """DSM reads INFO from the first entry; anything else is "invalid format"."""
-    with tarfile.open(spk_path, "r:gz") as archive:
+    with tarfile.open(spk_path, "r:*") as archive:
         assert archive.getnames()[0] == "INFO"
 
 
 def test_archive_carries_no_metadata_entries(spk_path):
     """macOS bsdtar writes pax/appledouble entries that DSM rejects."""
-    with tarfile.open(spk_path, "r:gz") as archive:
+    with tarfile.open(spk_path, "r:*") as archive:
         for member in archive.getmembers():
             assert "PaxHeader" not in member.name, member.name
             assert not os.path.basename(member.name).startswith("._"), member.name
@@ -150,3 +149,10 @@ def test_backend_version_matches_info(info):
     match = re.search(r'VERSION = "([^"]+)"', text)
     assert match, "no VERSION constant"
     assert match.group(1) == info["version"]
+
+
+def test_spk_is_an_uncompressed_tar(spk_path):
+    """DSM 7 refuses a gzipped container: the file must start with "INFO"."""
+    with open(spk_path, "rb") as handle:
+        head = handle.read(4)
+    assert head == b"INFO", "spk must be an uncompressed tar (got %r)" % head

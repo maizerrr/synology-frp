@@ -47,7 +47,9 @@ fi
 tar --format=ustar -czf "$BUILD/package.tgz" -C "$PKGROOT" .
 
 # --- spk skeleton ----------------------------------------------------------
-cp "$ROOT/INFO" "$SPKDIR/INFO"
+sed '/^create_time=/d;/^extractsize=/d' "$ROOT/INFO" > "$SPKDIR/INFO"
+printf 'create_time="%s"\nextractsize="%s"\n' \
+    "$(date +%Y%m%d-%H:%M:%S)" "$(du -sk "$PKGROOT" | cut -f1)" >> "$SPKDIR/INFO"
 [ -f "$ROOT/PACKAGE_ICON.PNG" ] && cp "$ROOT/PACKAGE_ICON.PNG" "$SPKDIR/"
 [ -f "$ROOT/PACKAGE_ICON_256.PNG" ] && cp "$ROOT/PACKAGE_ICON_256.PNG" "$SPKDIR/"
 cp -R "$ROOT/package/scripts" "$SPKDIR/scripts"
@@ -62,16 +64,20 @@ ENTRIES="INFO package.tgz scripts conf"
 [ -f "$SPKDIR/PACKAGE_ICON.PNG" ] && ENTRIES="$ENTRIES PACKAGE_ICON.PNG"
 [ -f "$SPKDIR/PACKAGE_ICON_256.PNG" ] && ENTRIES="$ENTRIES PACKAGE_ICON_256.PNG"
 
-( cd "$SPKDIR" && tar --format=ustar -czf "$OUT" $ENTRIES )
+( cd "$SPKDIR" && tar --format=ustar -cf "$OUT" $ENTRIES )
 
 # cheap self-check: the archive must start with the INFO entry and carry no
 # metadata entries that DSM chokes on
-first_entry="$(tar -tzf "$OUT" | head -1)"
+if [ "$(head -c 4 "$OUT")" != "INFO" ]; then
+    echo "build error: spk does not start with INFO (must be an uncompressed tar)" >&2
+    exit 1
+fi
+first_entry="$(tar -tf "$OUT" | head -1)"
 if [ "$first_entry" != "INFO" ]; then
     echo "build error: first archive entry is '$first_entry', expected INFO" >&2
     exit 1
 fi
-if tar -tzf "$OUT" | grep -qE '(^|/)PaxHeader|(^|/)\._'; then
+if tar -tf "$OUT" | grep -qE '(^|/)PaxHeader|(^|/)\._'; then
     echo "build error: archive contains pax/appledouble metadata entries" >&2
     exit 1
 fi
