@@ -37,6 +37,7 @@ python3 -m pytest -q --basetemp=./.pytest-tmp
 - **`web/frpc/dist` 占位**：`web/frpc/embed.go` 里有 `//go:embed dist`，而 dist 是 npm 构建产物、仓库里没有。我们不发布 frpc 自带的 dashboard，所以构建时放一个占位 `index.html` 让 embed 能解析。
 - **默认模板含 `loginFailExit = false`**：实测 frp 0.72 默认「首次登录失败就退出」，在 NAS 上等于服务器抖一下隧道就永久断了。设为 false 后它会一直重试。
 - **UI 与 frpc 分开守护**：`start-stop-status` 只管 UI 进程；frpc 由 UI 托管，所以配置写坏时 UI 还活着、能告诉你错在哪（卸载/停止时两进程一起收）。
+- **窗口是 DSM 原生窗口，不是浏览器弹窗**：DSM 7.2 起 `type: "url"` 只会 opening a pop-up，所以 `ui/config` 用 `type: "app"` + `type: "lib"` 声明两个 ExtJS 类（`SYNO.SDS.SynologyFrp.Instance` / `.MainWindow`，定义在 `ui/app.js`），`SYNO.SDS.AppWindow` 里放一个 iframe 指向 `/webman/3rdparty/synology-frp/index.html`。页面本身仍是普通 HTML，登录态同源共享。
 - **端口 9844 仅监听 127.0.0.1**，浏览器侧走 DSM 同源反代，登录态由 DSM 兜住，套件内不自建账号。
 - **配置文件在套件私有目录**（`/var/packages/synology-frp/var/frpc.toml|.ini`），卸载默认保留，重装自动接回。
 
