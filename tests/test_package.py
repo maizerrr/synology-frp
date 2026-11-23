@@ -115,3 +115,27 @@ def test_nginx_template_proxies_this_package(spk_path):
         text = archive.extractfile("conf/nginx/nginx.conf.template").read().decode("utf-8")
     assert "/webman/3rdparty/synology-frp/api/" in text
     assert "127.0.0.1:9844" in text
+
+
+def test_archive_starts_with_info(spk_path):
+    """DSM reads INFO from the first entry; anything else is "invalid format"."""
+    with tarfile.open(spk_path, "r:gz") as archive:
+        assert archive.getnames()[0] == "INFO"
+
+
+def test_archive_carries_no_metadata_entries(spk_path):
+    """macOS bsdtar writes pax/appledouble entries that DSM rejects."""
+    with tarfile.open(spk_path, "r:gz") as archive:
+        for member in archive.getmembers():
+            assert "PaxHeader" not in member.name, member.name
+            assert not os.path.basename(member.name).startswith("._"), member.name
+            assert not member.pax_headers, member.name
+
+
+def test_payload_tarball_is_clean_too():
+    path = os.path.join(ROOT, "build", "package.tgz")
+    assert os.path.exists(path), "run ./build.sh first"
+    with tarfile.open(path, "r:gz") as archive:
+        for member in archive.getmembers():
+            assert "PaxHeader" not in member.name, member.name
+            assert not member.pax_headers, member.name

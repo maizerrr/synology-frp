@@ -42,7 +42,9 @@ else
     echo "warning: no frpc binary in vendor/frpc (run make engine)" >&2
 fi
 
-tar -czf "$BUILD/package.tgz" -C "$PKGROOT" .
+# --format=ustar: macOS bsdtar defaults to pax, which injects a PaxHeader
+# entry that DSM's package parser rejects ("Invalid file format").
+tar --format=ustar -czf "$BUILD/package.tgz" -C "$PKGROOT" .
 
 # --- spk skeleton ----------------------------------------------------------
 cp "$ROOT/INFO" "$SPKDIR/INFO"
@@ -54,5 +56,23 @@ chmod 755 "$SPKDIR/scripts/"*
 cp "$BUILD/package.tgz" "$SPKDIR/package.tgz"
 
 OUT="$DIST/synology-frp-${VERSION}.spk"
-( cd "$SPKDIR" && tar -czf "$OUT" * )
+
+# Entry order matters: DSM reads INFO first. Never rely on shell glob order.
+ENTRIES="INFO package.tgz scripts conf"
+[ -f "$SPKDIR/PACKAGE_ICON.PNG" ] && ENTRIES="$ENTRIES PACKAGE_ICON.PNG"
+[ -f "$SPKDIR/PACKAGE_ICON_256.PNG" ] && ENTRIES="$ENTRIES PACKAGE_ICON_256.PNG"
+
+( cd "$SPKDIR" && tar --format=ustar -czf "$OUT" $ENTRIES )
+
+# cheap self-check: the archive must start with the INFO entry and carry no
+# metadata entries that DSM chokes on
+first_entry="$(tar -tzf "$OUT" | head -1)"
+if [ "$first_entry" != "INFO" ]; then
+    echo "build error: first archive entry is '$first_entry', expected INFO" >&2
+    exit 1
+fi
+if tar -tzf "$OUT" | grep -qE '(^|/)PaxHeader|(^|/)\._'; then
+    echo "build error: archive contains pax/appledouble metadata entries" >&2
+    exit 1
+fi
 echo "built: dist/$(basename "$OUT")"
