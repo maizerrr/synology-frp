@@ -13,7 +13,10 @@ import time
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 LOG_LIMIT_BYTES = 2 * 1024 * 1024
-START_GRACE_SECONDS = 0.9
+# frpc 校验配置是毫秒级的：启动后按 50ms 轮询，最多等 0.6s 就能判断它是不是
+# 立刻退出了。原来固定 sleep 0.9s + 停止时最多空转 2s，保存要 3 秒。
+START_PROBE_SECONDS = 0.6
+PROBE_INTERVAL = 0.05
 
 
 def default_binary():
@@ -34,6 +37,12 @@ class Supervisor:
         self.log_path = os.path.join(self.log_dir, "frpc.log")
         self.pid_path = os.path.join(var_dir, "frpc.pid")
         self._version = None
+        # 子进程句柄：必须留着，否则进程退出后变成僵尸，kill(pid, 0) 依然
+        # 返回成功，停止流程就会一直等到超时。
+        self._process = None
+        # 子进程句柄：必须留着，否则进程退出后变成僵尸，kill(pid, 0) 依然
+        # 返回成功，停止流程就会一直等到超时。
+        self._process = None
 
     # -- process state -------------------------------------------------
     def pid(self):
@@ -54,6 +63,10 @@ class Supervisor:
             return False
 
     def running(self):
+        if self._process is not None:
+            if self._process.poll() is None:
+                return True
+            self._process = None   # poll() 已经回收，别再当它活着
         return self._alive(self.pid())
 
     def status(self):
@@ -132,7 +145,10 @@ class Supervisor:
         with open(self.pid_path, "w", encoding="utf-8") as handle:
             handle.write(str(process.pid))
 
-        time.sleep(START_GRACE_SECONDS)
+        self._process = process
+        deadline = time.time() + START_PROBE_SECONDS
+        while time.time() < deadline and process.poll() is None:
+            time.sleep(PROBE_INTERVAL)
         code = process.poll()
         if code is not None:
             try:
@@ -147,21 +163,38 @@ class Supervisor:
         return {"started": True, "pid": process.pid, "error": ""}
 
     def stop(self):
-        pid = self.pid()
-        if pid and self._alive(pid):
+        process = self._process
+        if process is not None:
+            # 自己起的进程：terminate + wait，wait 会回收，不留僵尸
             try:
-                os.kill(pid, 15)
+                process.terminate()
             except OSError:
                 pass
-            for _ in range(20):
-                if not self._alive(pid):
-                    break
-                time.sleep(0.1)
-            if self._alive(pid):
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
                 try:
-                    os.kill(pid, 9)
+                    process.kill()
+                    process.wait(timeout=2)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+            self._process = None
+        else:
+            pid = self.pid()
+            if pid and self._alive(pid):
+                try:
+                    os.kill(pid, 15)
                 except OSError:
                     pass
+                for _ in range(30):
+                    if not self._alive(pid):
+                        break
+                    time.sleep(0.1)
+                if self._alive(pid):
+                    try:
+                        os.kill(pid, 9)
+                    except OSError:
+                        pass
         try:
             os.unlink(self.pid_path)
         except OSError:

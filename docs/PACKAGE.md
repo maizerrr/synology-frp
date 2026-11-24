@@ -40,7 +40,8 @@ python3 -m pytest -q --basetemp=./.pytest-tmp
 - **窗口是 DSM 原生小浮动窗口**：`INFO` 的 `dsmappname` 用 `SYNO.SDS.SynologyFrp.Application`；`ui/config` 以 `SynologyFrp.js` 为键，登记 `Application`（`type:"app"`，菜单入口）与 `MainWindow`（`type:"lib"`，窗口本体）。
 - **必须用 Ext JS 3 的写法**：DSM 桌面加载的是 Ext JS **3.4**（`/scripts/ext-3/ext-all.js`），`Ext.define` / `this.callParent` 是 Ext 4 的 API，在 3.4 上父类解析为 null，构造直接抛 `Cannot read properties of null (reading 'apply')`。所以类用 `Ext.extend(基类, {...})` 定义、构造里用 `superclass.constructor.call(this, ...)`；组件类名是 `Ext.form.TextArea` 而不是 `Ext.form.field.TextArea`；`Ext.create` 也不能用。窗口创建失败时 DSM 会留下一个永远 loading、关不掉的任务栏标签，症状具有误导性。
 - **配置回填要防「字段被重置」**：DSM 在窗口首次 show 之后会把表单字段清空，而 Ext 3 的 `setValue` 会走校验链（`errorMsgEl` 此时是 undefined），直接抛错、内容永远填不进去。正确做法是直接写 `el.dom.value`，并在首次加载后补两次（400ms / 1500ms），轮询里也继续补；一旦用户按过键（`input` 事件）就不再回填，避免盖掉正在编辑的内容。
-- 窗口内是原生 Ext 控件：logo、一行说明、状态行、配置 TextArea、保存按钮。不用 iframe，也不塞大页面。
+- **窗口内是纯 DOM，不用 Ext 控件**：Ext 3 的按钮在 DSM 主题下退化成纯文字、`Ext.Msg` 只剩一个灰块（按钮完全看不见）、vbox 布局用绝对定位算高度（多一个元素就错位，按钮会跑到顶部）。所以窗口 body 只有一段 HTML + flex 布局，Ext 只提供窗口外壳；提示信息用窗口内的内联条，不弹窗。
+- **保存慢的根因是僵尸进程**：`stop()` 以前用 `kill(pid, 0)` 判断是否退出，但子进程退出后没被 `wait()` 回收，`kill(pid, 0)` 依然成功 → 每次保存都要空转满 2 秒；再加上启动后固定 `sleep(0.9)`，一共约 3 秒。现在保留 Popen 句柄、`wait()` 回收，启动探测改成 50ms 轮询最多 0.6 秒，保存降到 1 秒内。
 - **API 走 DSM 自己的 nginx，但要按 DSM 7.2 的 `web-config` 声明**：光放一个 `conf/nginx/nginx.conf.template` DSM **不会**接管（实测在任何端口都不生效，请求落到 DSM 自己的 403 页）。正确做法是在 `conf/resource` 里登记
   `{"web-config": {"nginx-static-config": {"enable": [{"type": "dsm", "relpath": "nginx/api.conf"}]}}}`，
   并把片段打进 `package.tgz` 的 `nginx/api.conf`（`relpath` 相对包 target 目录），`INFO` 里写 `instuninst_restart_services="nginx.service"`，DSM 才会把它链进 DSM server block 并 reload。`type` 可选 `dsm/www/http/server/x-accel/main`，`dsm` 表示放进 DSM 自己的 server block（含自定义端口/域名块）。

@@ -190,8 +190,8 @@ def test_bundle_uses_ext3_idioms(payload):
     assert "superclass.constructor.call" in bundle
     assert "callParent" not in bundle, "Ext 3 has no working callParent"
     assert "Ext.define" not in bundle, "Ext.define is Ext 4; DSM ships Ext 3.4"
-    assert "Ext.form.TextArea" in bundle
     assert "Ext.form.field." not in bundle, "that namespace is Ext 4"
+    assert "Ext.form.TextArea" not in bundle, "no Ext form widgets inside the window"
     assert "appWindowName" in bundle
     assert "tag: 'iframe'" not in bundle
 
@@ -224,8 +224,8 @@ def test_bundle_uses_ext3_idioms(payload):
     assert "superclass.constructor.call" in bundle
     assert "callParent" not in bundle, "Ext 3 has no working callParent"
     assert "Ext.define" not in bundle, "Ext.define is Ext 4; DSM ships Ext 3.4"
-    assert "Ext.form.TextArea" in bundle
     assert "Ext.form.field." not in bundle, "that namespace is Ext 4"
+    assert "Ext.form.TextArea" not in bundle, "no Ext form widgets inside the window"
     assert "appWindowName" in bundle
     assert "tag: 'iframe'" not in bundle
 
@@ -238,8 +238,7 @@ def test_content_fill_survives_a_field_reset(payload):
     """
     bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
     assert "applyContent" in bundle
-    assert "el.dom.value = me.desiredContent" in bundle
-    assert "me.editor.setValue" not in bundle, "setValue throws after a DSM field reset"
+    assert "box.value = text" in bundle, "write the textarea directly"
     assert "userEdited" in bundle, "never overwrite what the user is typing"
 
 
@@ -251,8 +250,7 @@ def test_content_fill_survives_a_field_reset(payload):
     """
     bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
     assert "applyContent" in bundle
-    assert "el.dom.value = me.desiredContent" in bundle
-    assert "me.editor.setValue" not in bundle, "setValue throws after a DSM field reset"
+    assert "box.value = text" in bundle, "write the textarea directly"
     assert "userEdited" in bundle, "never overwrite what the user is typing"
 
 
@@ -279,3 +277,17 @@ def test_footer_is_not_named_footer(payload):
     bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
     assert "me.footer =" not in bundle
     assert "this.footer =" not in bundle
+
+
+def test_window_ui_is_plain_dom(payload):
+    """Ext widgets lose their chrome in DSM: buttons turn into text and
+    Ext.Msg into a grey block with no visible buttons, and the vbox layout
+    mispositions children. The window body is therefore plain DOM."""
+    raw = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    bundle = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+    bundle = re.sub(r"//[^\n]*", "", bundle)
+
+    assert "Ext.Msg" not in bundle, "the alert dialog renders as a grey block"
+    assert "Ext.form." not in bundle, "no Ext widgets inside the window"
+    assert "<textarea" in bundle
+    assert "display:flex" in bundle.replace(" ", "")

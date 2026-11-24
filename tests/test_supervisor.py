@@ -24,6 +24,34 @@ def test_version_is_reported(supervisor):
     assert supervisor.version() == "0.72.0-fake"
 
 
+def test_restart_does_not_wait_for_a_zombie(supervisor, config_file):
+    """The child must be reaped: kill(pid, 0) stays true for a zombie, which
+    used to make every save wait out the full stop timeout."""
+    import time
+
+    supervisor.start(config_file)
+    started = time.time()
+    result = supervisor.restart(config_file)
+    elapsed = time.time() - started
+
+    assert result["started"] is True
+    assert elapsed < 1.6, "restart took %.2fs, looks like a zombie is blocking" % elapsed
+
+
+def test_restart_does_not_wait_for_a_zombie(supervisor, config_file):
+    """The child must be reaped: kill(pid, 0) stays true for a zombie, which
+    used to make every save wait out the full stop timeout."""
+    import time
+
+    supervisor.start(config_file)
+    started = time.time()
+    result = supervisor.restart(config_file)
+    elapsed = time.time() - started
+
+    assert result["started"] is True
+    assert elapsed < 1.6, "restart took %.2fs, looks like a zombie is blocking" % elapsed
+
+
 def test_start_and_stop(supervisor, config_file):
     result = supervisor.start(config_file)
     assert result["started"] is True
