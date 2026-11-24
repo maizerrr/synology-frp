@@ -15,6 +15,11 @@ serverPort = 7000
 # 连不上服务器时继续重试，而不是直接退出（NAS 上建议保持 false）
 loginFailExit = false
 
+# xtcp（P2P）打洞用的 STUN。frp 默认的 stun.easyvoip.com 在国内经常超时，
+# 表现是日志里反复 "wait response from stun server timeout"、打洞失败。
+# stun.miwifi.com 实测可用（会返回两个公网地址）。不用 xtcp 可以删掉这行。
+natHoleStunServer = "stun.miwifi.com:3478"
+
 # 示例：把本机 5000 端口（DSM 网页）映射到服务器的 6000 端口
 # 不需要就整段删掉
 [[proxies]]

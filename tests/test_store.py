@@ -77,3 +77,11 @@ def test_no_temp_files_left_behind(tmp_path):
     store.write("toml", "serverAddr = 'x'\n")
     leftovers = [name for name in os.listdir(str(tmp_path)) if name.startswith(".tmp-")]
     assert leftovers == []
+
+
+def test_template_sets_a_reachable_stun_server():
+    """frp's default stun.easyvoip.com times out on many CN networks, which makes
+    xtcp hole punching fail with "wait response from stun server timeout"."""
+    from frpui.store import TOML_TEMPLATE
+
+    assert 'natHoleStunServer = "stun.miwifi.com:3478"' in TOML_TEMPLATE

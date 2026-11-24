@@ -11,7 +11,7 @@ from urllib.parse import unquote, urlparse
 from .store import FILE_NAMES, Store, StoreError
 from .supervisor import Supervisor
 
-VERSION = "1.0.35"
+VERSION = "1.0.37"
 DEFAULT_PACKAGE = "synology-frp"
 MAX_BODY = 4 * 1024 * 1024
 DEFAULT_LINES = 80
