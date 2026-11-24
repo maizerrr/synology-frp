@@ -34,7 +34,16 @@
         '.frp-logo{text-align:center;padding:2px 0 10px;line-height:0}',
         '.frp-logo img{width:88px;height:88px;border-radius:44px}',
         '.frp-hint{text-align:center;color:#5c6672;padding:0 0 10px}',
-        '.frp-status{color:#8a929c;font-size:12px;padding:0 0 8px}',
+        '.frp-status{display:flex;align-items:center;gap:10px;color:#8a929c;',
+        'font-size:12px;padding:0 0 8px}',
+        '.frp-status span{flex:1 1 auto;min-width:0}',
+        '.frp-link{color:#1f7ae0;text-decoration:none;cursor:pointer;font-size:12px;',
+        'flex:0 0 auto}',
+        '.frp-link:hover{text-decoration:underline}',
+        '.frp-log{max-height:150px;overflow:auto;margin:8px 0 0;padding:8px 10px;',
+        'border-radius:4px;background:#0f1419;color:#d7e0ea;',
+        'font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;',
+        'word-break:break-word;}',
         '.frp-editor{flex:1 1 auto;min-height:0;width:100%;box-sizing:border-box;',
         'border:1px solid #c9d1d9;border-radius:4px;padding:8px 10px;background:#fff;',
         'color:#1d2129;font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;resize:none;',
@@ -65,8 +74,12 @@
         '<div class="frp-root">',
         '  <div class="frp-logo"><img src="' + ASSET + 'images/icon_256.png" alt=""></div>',
         '  <div class="frp-hint">套件全局参数配置，保存后会自动重启套件生效！！！</div>',
-        '  <div class="frp-status" data-el="status">正在读取状态…</div>',
+        '  <div class="frp-status">',
+        '    <span data-el="status">正在读取状态…</span>',
+        '    <a class="frp-link" data-el="logtoggle" href="#" onclick="window.__frpLog&&window.__frpLog();return false;">日志</a>',
+        '  </div>',
         '  <textarea class="frp-editor" data-el="content" spellcheck="false" wrap="off"></textarea>',
+        '  <pre class="frp-log" data-el="log" style="display:none"></pre>',
         '  <div class="frp-toast" data-el="toast" style="display:none"></div>',
         '  <div class="frp-footer">',
         '    <button type="button" class="frp-btn" data-el="save"',
@@ -176,14 +189,19 @@
 
             me.saveClickHandler = function (event) {
                 var node = event.target;
-                if (node && node.getAttribute && node.getAttribute('data-el') === 'save') {
+                var marker = node && node.getAttribute && node.getAttribute('data-el');
+                if (marker === 'save') {
                     event.preventDefault();
                     me.save();
+                } else if (marker === 'logtoggle') {
+                    event.preventDefault();
+                    me.toggleLog();
                 }
             };
             document.addEventListener('click', me.saveClickHandler);
             // 内联 onclick 走这个桥；不依赖 DOM 层级，也不怕事件冒泡被拦
             window.__frpSave = function () { me.save(); };
+            window.__frpLog = function () { me.toggleLog(); };
 
             me.pollId = window.setInterval(function () { me.refreshStatus(); }, 5000);
         },
@@ -267,6 +285,29 @@
             }
         },
 
+        toggleLog: function () {
+            var me = this;
+            // 链接同时挂了内联 onclick 和 document 委托，会触发两次（一开一关）
+            var now = new Date().getTime();
+            if (me.logToggleAt && now - me.logToggleAt < 150) { return; }
+            me.logToggleAt = now;
+            var box = me.node('log');
+            if (!box) { return; }
+            if (box.style.display !== 'none') {
+                box.style.display = 'none';
+                return;
+            }
+            box.style.display = 'block';
+            box.textContent = '正在读取日志…';
+            request('GET', '/logs?lines=200', undefined, function (data) {
+                var lines = (data && data.lines) || [];
+                box.textContent = lines.length ? lines.join('\n') : '（日志为空）';
+                box.scrollTop = box.scrollHeight;
+            }, function (message) {
+                box.textContent = '日志读取失败：' + message;
+            });
+        },
+
         save: function () {
             var me = this;
             if (me.saving) { return; }   // 三层监听可能同时触发，只放一次
@@ -313,6 +354,7 @@
                 this.saveClickHandler = null;
             }
             if (window.__frpSave) { window.__frpSave = null; }
+            if (window.__frpLog) { window.__frpLog = null; }
             SYNO.SDS.SynologyFrp.MainWindow.superclass.destroy.apply(this, arguments);
         }
     });

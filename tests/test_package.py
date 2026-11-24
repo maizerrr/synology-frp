@@ -291,3 +291,12 @@ def test_window_ui_is_plain_dom(payload):
     assert "Ext.form." not in bundle, "no Ext widgets inside the window"
     assert "<textarea" in bundle
     assert "display:flex" in bundle.replace(" ", "")
+
+
+def test_window_can_show_the_frpc_log(payload):
+    """Users need to self-diagnose tunnel problems without SSH."""
+    bundle = (payload / "ui" / "SynologyFrp.js").read_text(encoding="utf-8")
+    assert "toggleLog" in bundle
+    assert 'data-el="log"' in bundle
+    assert "'/logs?lines=200'" in bundle
+    assert "window.__frpLog" in bundle, "inline bridge for the link"
