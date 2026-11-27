@@ -60,6 +60,7 @@ printf 'create_time="%s"\nextractsize="%s"\n' \
 [ -f "$ROOT/PACKAGE_ICON_256.PNG" ] && cp "$ROOT/PACKAGE_ICON_256.PNG" "$SPKDIR/"
 cp -R "$ROOT/package/scripts" "$SPKDIR/scripts"
 cp -R "$ROOT/package/conf" "$SPKDIR/conf"
+[ -d "$ROOT/package/WIZARD_UIFILES" ] && cp -R "$ROOT/package/WIZARD_UIFILES" "$SPKDIR/WIZARD_UIFILES"
 chmod 755 "$SPKDIR/scripts/"*
 cp "$BUILD/package.tgz" "$SPKDIR/package.tgz"
 
@@ -67,6 +68,7 @@ OUT="$DIST/synology-frp-${VERSION}.spk"
 
 # Entry order matters: DSM reads INFO first. Never rely on shell glob order.
 ENTRIES="INFO package.tgz scripts conf"
+[ -d "$SPKDIR/WIZARD_UIFILES" ] && ENTRIES="$ENTRIES WIZARD_UIFILES"
 [ -f "$SPKDIR/PACKAGE_ICON.PNG" ] && ENTRIES="$ENTRIES PACKAGE_ICON.PNG"
 [ -f "$SPKDIR/PACKAGE_ICON_256.PNG" ] && ENTRIES="$ENTRIES PACKAGE_ICON_256.PNG"
 

@@ -1,0 +1,16 @@
+[{
+  "step_title": "卸载选项",
+  "items": [{
+    "type": "singleselect",
+    "desc": "请选择如何处理 FRP 客户端的配置：",
+    "subitems": [{
+      "key": "wizard_keep_data",
+      "desc": "保留配置文件和日志（推荐，重新安装会自动接回）",
+      "defaultValue": true
+    }, {
+      "key": "wizard_remove_data",
+      "desc": "同时删除配置文件和日志（删除后无法恢复）",
+      "defaultValue": false
+    }]
+  }]
+}]

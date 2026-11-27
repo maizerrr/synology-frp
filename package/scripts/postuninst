@@ -1,8 +1,23 @@
 #!/bin/sh
 # Runs after uninstallation.
 #
-# Deliberately does nothing: DSM keeps the package's private data
-# (/volumeX/@appdata/<package>) unless the user ticks "delete data" in the
-# uninstall wizard, so a reinstall picks the configuration back up.
+# The uninstall wizard (WIZARD_UIFILES/uninstall_uifile) asks whether the
+# private data should go too; DSM exports the chosen keys as environment
+# variables, so `wizard_remove_data` arrives as "true"/"false". Default is to
+# keep the data, so a reinstall picks the configuration back up.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/common"
+
+if [ "${wizard_remove_data:-false}" = "true" ]; then
+    # $VAR_DIR is normally a symlink into /volumeX/@appdata; rm -rf on the link
+    # would only delete the link, so resolve it first.
+    target="$VAR_DIR"
+    if [ -L "$VAR_DIR" ]; then
+        target="$(readlink -f "$VAR_DIR" 2>/dev/null || echo "$VAR_DIR")"
+    fi
+    rm -rf "$target"
+    rm -f "$VAR_DIR"
+fi
 
 exit 0

@@ -300,3 +300,45 @@ def test_window_can_show_the_frpc_log(payload):
     assert 'data-el="log"' in bundle
     assert "'/logs?lines=200'" in bundle
     assert "window.__frpLog" in bundle, "inline bridge for the link"
+
+
+def test_uninstall_wizard_offers_to_remove_the_config(spk_path):
+    """DSM shows WIZARD_UIFILES/uninstall_uifile before uninstalling and exports
+    each key as an environment variable for preuninst/postuninst."""
+    with tarfile.open(spk_path, "r:*") as archive:
+        names = [n for n in archive.getnames() if n.startswith("WIZARD_UIFILES/")]
+        assert "WIZARD_UIFILES/uninstall_uifile" in names, "the English wizard is required"
+
+        for name in names:
+            if not name.endswith("uninstall_uifile") and "_uifile_" not in name:
+                continue
+            raw = archive.extractfile(name).read().decode("utf-8")
+            steps = json.loads(raw)
+            keys = {}
+            for step in steps:
+                assert step["step_title"], "%s: step_title is empty" % name
+                for item in step["items"]:
+                    for sub in item["subitems"]:
+                        keys[sub["key"]] = sub.get("defaultValue")
+            assert "wizard_remove_data" in keys, "%s: missing wizard_remove_data" % name
+            assert "wizard_keep_data" in keys, "%s: missing wizard_keep_data" % name
+            assert keys["wizard_remove_data"] is False, "删除必须是显式勾选，默认保留"
+            assert keys["wizard_keep_data"] is True
+
+
+def test_postuninst_removes_data_only_when_asked(tmp_path):
+    """Keep by default; wipe only when the wizard said so."""
+    script = os.path.join(ROOT, "package", "scripts", "postuninst")
+    var_dir = tmp_path / "var"
+    (var_dir / "logs").mkdir(parents=True)
+    (var_dir / "frpc.toml").write_text('serverAddr = "x"\n', encoding="utf-8")
+
+    env = dict(os.environ, SYNOPKG_PKGVAR=str(var_dir))
+    env.pop("wizard_remove_data", None)
+    subprocess.run(["sh", script], env=env, check=True)
+    assert var_dir.is_dir(), "默认必须保留配置"
+    assert (var_dir / "frpc.toml").exists()
+
+    env["wizard_remove_data"] = "true"
+    subprocess.run(["sh", script], env=env, check=True)
+    assert not var_dir.exists(), "勾选删除后目录必须消失"

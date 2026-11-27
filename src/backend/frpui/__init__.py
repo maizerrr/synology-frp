@@ -1,3 +1,3 @@
 """FRP client package backend."""
 
-__version__ = "1.0.37"
+__version__ = "1.0.39"

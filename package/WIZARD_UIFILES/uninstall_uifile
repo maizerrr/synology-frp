@@ -1,0 +1,16 @@
+[{
+  "step_title": "Uninstall options",
+  "items": [{
+    "type": "singleselect",
+    "desc": "Choose what happens to the FRP Client configuration:",
+    "subitems": [{
+      "key": "wizard_keep_data",
+      "desc": "Keep the configuration and logs (recommended - a reinstall picks them up again)",
+      "defaultValue": true
+    }, {
+      "key": "wizard_remove_data",
+      "desc": "Also delete the configuration and logs (cannot be undone)",
+      "defaultValue": false
+    }]
+  }]
+}]
